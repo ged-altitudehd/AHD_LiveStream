@@ -5,8 +5,8 @@
  * a live value arrives):
  *   race.title · race.number · race.type · lane[n].code · lane[n].suit   (n = 1–9)
  *
- * Lane cards show the school/club code (e.g. AGSB), not the full name, per the
- * AltitudeHD brand: codes are set in JetBrains Mono, uppercase and tracked.
+ * Lane cards show the school/club code (e.g. AGSB), not the full name.
+ * Styled to the Milford Asset Management brand guidelines (see vmix-rowing-l3.css).
  *
  * Programmable lane cards — a sub-card pops above a lane when, within a rolling
  * window, that crew's
@@ -356,12 +356,12 @@
         }
         const [label, value, delta] = p.el.children;
         if (kind === 'pace') {
-            label.textContent = 'Pace ▼';
+            label.textContent = 'Pace';
             value.textContent = fmtSplit(info.value);
             value.appendChild(el('span', 'rl3-sub-unit', '/500'));
             delta.textContent = Number.isFinite(info.delta) ? `${fmtSigned(info.delta, 1)}s` : '';
         } else {
-            label.textContent = 'Rating ▲';
+            label.textContent = 'Rating';
             value.textContent = Number.isFinite(info.value) ? String(Math.round(info.value)) : '––';
             value.appendChild(el('span', 'rl3-sub-unit', 'spm'));
             delta.textContent = Number.isFinite(info.delta) ? fmtSigned(Math.round(info.delta), 0) : '';

@@ -1,59 +1,45 @@
 /* Rowing lane lower third — 1920×1080, transparent background.
    vMix browser input: vmix-rowing-l3.html (see vmix-rowing-l3.js for params).
-   Follows the AltitudeHD design system (AltitudeHD repo, design_handoff_altitudehd_website/design-system):
-   carbon broadcast straps at ~92%, cream text, sky as the single accent, cream as the
-   alternate accent, 3px radii, Space Grotesk / Archivo / JetBrains Mono. */
+
+   Milford Asset Management brand (Brand Guidelines, Sept 2022 V8):
+   - Primary colours: Milford grey #303C42 (PMS 425) and Milford orange #E1690E (PMS 159),
+     with orange tints 80 / 65 / 30 %. Primary colours always present; orange used as the accent.
+   - Type: Gotham → Montserrat for digital. Medium for headlines, tracking −25, snug leading.
+     Bold for product-style labels. No full stops on headings; sentence case.
+   - Lozenge: rounded rectangle used to highlight a key word or call to action (race type here).
+   - Holding device: transparent grey Mitre Peak with an orange ridge line, housing the logo,
+     always bottom right. The logo artwork is used as supplied (never re-created). */
 
 @font-face {
-    font-family: 'Space Grotesk';
-    font-style: normal;
-    font-weight: 300 700;
-    font-display: block;
-    src: url('assets/fonts/altitudehd/SpaceGrotesk.woff2') format('woff2');
-}
-
-@font-face {
-    font-family: 'Archivo';
+    font-family: 'Montserrat';
     font-style: normal;
     font-weight: 100 900;
     font-display: block;
-    src: url('assets/fonts/altitudehd/Archivo.woff2') format('woff2');
-}
-
-@font-face {
-    font-family: 'JetBrains Mono';
-    font-style: normal;
-    font-weight: 100 800;
-    font-display: block;
-    src: url('assets/fonts/altitudehd/JetBrainsMono.woff2') format('woff2');
+    src: url('assets/fonts/milford/Montserrat-latin-wght.woff2') format('woff2');
 }
 
 :root {
-    /* AltitudeHD colour tokens */
-    --alt-sky: #2e7de0;
-    --alt-sky-deep: #1b5cb4;
-    --alt-navy: #12325e;
-    --alt-ice: #d9e7f8;
-    --alt-carbon: #0d1117;
-    --alt-ink: #16202e;
-    --alt-grey-900: #232d3a;
-    --alt-grey-700: #4e5a68;
-    --alt-grey-500: #8a96a5;
-    --alt-grey-300: #c9d1da;
-    --alt-cream: #f5f0e4;
-    --alt-white: #ffffff;
+    /* Milford primary */
+    --mf-grey: #303c42;
+    --mf-orange: #e1690e;
+    --mf-orange-80: #e9893f;
+    --mf-orange-65: #eda062;
+    --mf-orange-30: #f6d2b7;
+    --mf-light: #f7f7f7;
+    --mf-white: #ffffff;
 
-    /* Broadcast strap (design-system LowerThird) */
-    --strap-bg: rgba(13, 17, 23, 0.92);
-    --strap-hairline: rgba(245, 240, 228, 0.14);
-    --strap-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
-    --radius-xs: 3px;
+    /* Derived from Milford grey for broadcast surfaces */
+    --mf-surface: rgba(48, 60, 66, 0.94);
+    --mf-surface-deep: #232c31;
+    --mf-hairline: rgba(247, 247, 247, 0.16);
+    --mf-muted: rgba(247, 247, 247, 0.62);
+    --mf-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
 
-    --font-display: 'Space Grotesk', system-ui, sans-serif;
-    --font-body: 'Archivo', 'Segoe UI', system-ui, sans-serif;
-    --font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
-    --ls-display: -0.02em;
-    --ls-label: 0.08em;
+    --radius-lozenge: 8px;
+    --radius-card: 6px;
+
+    --font: 'Montserrat', 'Gotham', 'Segoe UI', system-ui, sans-serif;
+    --track-headline: -0.025em;
 
     --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
     --ease-standard: cubic-bezier(0.2, 0, 0.2, 1);
@@ -61,6 +47,7 @@
     --rl3-gap: 8px;
     --rl3-card-h: 142px;
     --rl3-rail-h: 60px;
+    --rl3-hold-w: 250px;
 }
 
 * { box-sizing: border-box; }
@@ -72,16 +59,17 @@ body.rl3-page {
     height: 1080px;
     overflow: hidden;
     background: transparent;
-    color: var(--alt-cream);
-    font-family: var(--font-body);
+    color: var(--mf-white);
+    font-family: var(--font);
+    font-variant-numeric: tabular-nums;
     -webkit-font-smoothing: antialiased;
 }
 
 /* Preview backdrop for design work only (?bg=1) — never on air. */
 body.rl3-page.rl3--preview-bg {
     background:
-        linear-gradient(180deg, rgba(13, 17, 23, 0) 55%, rgba(13, 17, 23, 0.45) 100%),
-        linear-gradient(160deg, #6f8fae 0%, #35597a 45%, #1c3a52 100%);
+        linear-gradient(180deg, rgba(0, 0, 0, 0) 55%, rgba(0, 0, 0, 0.35) 100%),
+        linear-gradient(160deg, #7d97ab 0%, #45627a 45%, #243b4d 100%);
 }
 
 .rl3-stage {
@@ -95,13 +83,13 @@ body.rl3-page.rl3--preview-bg {
     display: none;
     position: absolute;
     inset: 54px 96px;
-    border: 1px dashed rgba(245, 240, 228, 0.35);
+    border: 1px dashed rgba(255, 255, 255, 0.35);
     pointer-events: none;
 }
 
 .rl3--guides .rl3-safe { display: block; }
 
-/* ---------- Layout ---------- */
+/* ---------- Layout: [lanes over rail] + holding device bottom right ---------- */
 
 .rl3 {
     position: absolute;
@@ -109,105 +97,148 @@ body.rl3-page.rl3--preview-bg {
     right: 96px;
     bottom: 54px;
     display: flex;
-    flex-direction: column;
+    align-items: flex-end;
     gap: var(--rl3-gap);
     visibility: hidden;
 }
 
 .rl3--on .rl3 { visibility: visible; }
 
+.rl3-main {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--rl3-gap);
+}
+
 .rl3-lanes {
     display: flex;
     gap: var(--rl3-gap);
-    justify-content: center;
     height: var(--rl3-card-h);
 }
 
-/* ---------- Base strap: race number / title / type ---------- */
+/* ---------- Race rail: number · title · type lozenge ---------- */
 
 .rl3-rail {
     display: flex;
-    align-items: stretch;
+    align-items: center;
+    gap: 18px;
     height: var(--rl3-rail-h);
-    background: var(--strap-bg);
-    border-radius: var(--radius-xs);
-    overflow: hidden;
-    box-shadow: var(--strap-shadow);
+    padding: 0 12px 0 22px;
+    background: var(--mf-surface);
+    border-radius: var(--radius-card);
+    box-shadow: var(--mf-shadow);
     transform-origin: left center;
 }
 
 .rl3-rail-num {
     display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 0 22px;
-    background: var(--alt-sky);
-    color: var(--alt-white);
-    font-family: var(--font-mono);
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
+    align-items: baseline;
+    gap: 8px;
+    padding-right: 18px;
+    border-right: 1px solid var(--mf-hairline);
+    white-space: nowrap;
 }
 
 .rl3-rail-num-label {
-    font-size: 15px;
-    letter-spacing: var(--ls-label);
-    text-transform: uppercase;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--mf-orange);
 }
 
 .rl3-rail-num-val {
     font-size: 30px;
+    font-weight: 600;
+    letter-spacing: var(--track-headline);
 }
 
 .rl3-rail-title {
     flex: 1 1 auto;
     min-width: 0;
-    display: flex;
-    align-items: center;
-    padding: 0 26px;
-    font-family: var(--font-display);
-    font-size: 31px;
-    font-weight: 700;
-    letter-spacing: var(--ls-display);
+    font-size: 30px;
+    font-weight: 500;
+    letter-spacing: var(--track-headline);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
+/* Lozenge highlight (brand: Gotham/Montserrat only, text fits comfortably, rounded corners). */
 .rl3-rail-type {
-    display: flex;
-    align-items: center;
-    padding: 0 24px;
-    border-left: 1px solid var(--strap-hairline);
-    font-family: var(--font-mono);
-    font-size: 17px;
-    font-weight: 700;
-    letter-spacing: var(--ls-label);
-    text-transform: uppercase;
-    color: var(--alt-grey-300);
+    flex: 0 0 auto;
+    padding: 7px 16px 8px;
+    border-radius: var(--radius-lozenge);
+    background: rgba(247, 247, 247, 0.12);
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
     white-space: nowrap;
 }
 
-/* Finals get the cream accent; semis sit in sky. Everything else stays quiet. */
-.rl3-rail-type[data-tier='final'] {
-    background: var(--alt-cream);
-    color: var(--alt-carbon);
-    border-left-color: transparent;
+.rl3-rail-type[data-tier='final'],
+.rl3-rail-type[data-tier='semi'] {
+    background: var(--mf-orange);
+    color: var(--mf-white);
 }
 
-.rl3-rail-type[data-tier='semi'] { color: var(--alt-sky); }
+.rl3-rail-type[data-tier='semi'] { background: var(--mf-orange-80); }
+
+/* ---------- Holding device (Milford): transparent grey peak + orange ridge + logo ---------- */
+
+.rl3-hold {
+    position: relative;
+    flex: 0 0 var(--rl3-hold-w);
+    height: calc(var(--rl3-card-h) + var(--rl3-gap) + var(--rl3-rail-h));
+}
+
+.rl3-hold svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+}
+
+.rl3-hold-fill { fill: var(--mf-surface); }
+
+.rl3-hold-ridge {
+    fill: none;
+    stroke: var(--mf-orange);
+    stroke-width: 3;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+}
+
+/* lower-logo-art.png carries an unrelated orange wedge at x 208–237;
+   crop to the logo itself (x 2–112 of 240) and centre it under the peak. */
+.rl3-hold-logo {
+    position: absolute;
+    right: 38px;
+    bottom: 14px;
+    width: 120px;
+    height: 112px;
+    overflow: hidden;
+}
+
+.rl3-hold-logo img {
+    display: block;
+    width: 255px;
+    height: auto;
+    margin-left: -2px;
+}
 
 /* ---------- Lane cards ---------- */
 
 .rl3-card {
     position: relative;
     flex: 1 1 0;
-    max-width: 240px;
     min-width: 0;
     display: flex;
     flex-direction: column;
-    background: var(--strap-bg);
-    border-radius: var(--radius-xs);
-    box-shadow: var(--strap-shadow);
+    background: var(--mf-surface);
+    border-radius: var(--radius-card);
+    box-shadow: var(--mf-shadow);
 }
 
 .rl3-card-suit {
@@ -216,8 +247,8 @@ body.rl3-page.rl3--preview-bg {
     display: flex;
     align-items: flex-start;
     justify-content: center;
-    background: var(--alt-white);
-    border-radius: var(--radius-xs) var(--radius-xs) 0 0;
+    background: var(--mf-white);
+    border-radius: var(--radius-card) var(--radius-card) 0 0;
     overflow: hidden;
 }
 
@@ -238,7 +269,7 @@ body.rl3-page.rl3--preview-bg {
     right: 0;
     bottom: 0;
     height: 10px;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, var(--alt-white) 90%);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, var(--mf-white) 90%);
 }
 
 .rl3-suit-svg {
@@ -248,21 +279,19 @@ body.rl3-page.rl3--preview-bg {
 
 .rl3-card-lane {
     position: absolute;
-    left: 0;
-    top: 0;
-    min-width: 38px;
-    height: 38px;
-    padding: 0 8px;
+    left: 6px;
+    top: 6px;
+    min-width: 32px;
+    height: 32px;
+    padding: 0 7px;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--alt-carbon);
-    color: var(--alt-cream);
-    font-family: var(--font-mono);
-    font-size: 22px;
+    background: var(--mf-grey);
+    color: var(--mf-white);
+    font-size: 19px;
     font-weight: 700;
-    font-variant-numeric: tabular-nums;
-    border-radius: var(--radius-xs) 0 var(--radius-xs) 0;
+    border-radius: var(--radius-lozenge);
     z-index: 1;
 }
 
@@ -272,10 +301,9 @@ body.rl3-page.rl3--preview-bg {
     align-items: center;
     justify-content: center;
     padding: 0 8px;
-    font-family: var(--font-mono);
-    font-size: 26px;
+    font-size: 25px;
     font-weight: 700;
-    letter-spacing: var(--ls-label);
+    letter-spacing: 0.04em;
     text-transform: uppercase;
     white-space: nowrap;
     overflow: hidden;
@@ -297,15 +325,14 @@ body.rl3-page.rl3--preview-bg {
 .rl3-sub {
     position: relative;
     display: grid;
-    grid-template-columns: 1fr auto;
-    align-items: baseline;
+    grid-template-columns: auto 1fr;
+    align-items: center;
     column-gap: 8px;
-    row-gap: 2px;
-    padding: 8px 12px 9px;
-    background: var(--strap-bg);
-    border-radius: var(--radius-xs);
-    border-left: 4px solid var(--rl3-sub-accent);
-    box-shadow: var(--strap-shadow);
+    row-gap: 4px;
+    padding: 8px 10px 10px;
+    background: var(--mf-surface);
+    border-radius: var(--radius-card);
+    box-shadow: var(--mf-shadow);
     transform-origin: bottom center;
     animation: rl3-sub-in 300ms var(--ease-out) both;
 }
@@ -319,51 +346,53 @@ body.rl3-page.rl3--preview-bg {
     margin-left: -7px;
     border: 7px solid transparent;
     border-bottom: 0;
-    border-top-color: var(--strap-bg);
+    border-top-color: var(--mf-surface);
 }
 
 .rl3-sub + .rl3-sub::after { display: none; }
 
-.rl3-sub--pace { --rl3-sub-accent: var(--alt-sky); }
-.rl3-sub--rate { --rl3-sub-accent: var(--alt-cream); }
+/* Pace = Milford orange; rating = 30% orange tint — both primary palette. */
+.rl3-sub--pace { --rl3-sub-accent: var(--mf-orange); --rl3-sub-on: var(--mf-white); }
+.rl3-sub--rate { --rl3-sub-accent: var(--mf-orange-30); --rl3-sub-on: var(--mf-grey); }
 
 .rl3-sub--out { animation: rl3-sub-out 180ms var(--ease-standard) both; }
 
+/* Label sits in a small lozenge. */
 .rl3-sub-label {
-    font-family: var(--font-mono);
-    font-size: 12px;
+    justify-self: start;
+    padding: 2px 8px 3px;
+    border-radius: 6px;
+    background: var(--rl3-sub-accent);
+    color: var(--rl3-sub-on);
+    font-size: 13px;
     font-weight: 700;
-    letter-spacing: var(--ls-label);
-    text-transform: uppercase;
-    color: var(--rl3-sub-accent);
 }
 
 .rl3-sub-value {
     grid-column: 1 / -1;
     grid-row: 2;
     white-space: nowrap;
-    font-family: var(--font-mono);
     font-size: 30px;
-    font-weight: 700;
-    line-height: 1.05;
-    font-variant-numeric: tabular-nums;
-    color: var(--alt-cream);
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: var(--track-headline);
+    color: var(--mf-white);
 }
 
 .rl3-sub-unit {
     font-size: 13px;
     font-weight: 500;
-    color: var(--alt-grey-300);
+    letter-spacing: 0;
+    color: var(--mf-muted);
     margin-left: 4px;
 }
 
 .rl3-sub-delta {
     grid-row: 1;
     grid-column: 2;
-    font-family: var(--font-mono);
+    justify-self: end;
     font-size: 16px;
     font-weight: 700;
-    font-variant-numeric: tabular-nums;
     color: var(--rl3-sub-accent);
 }
 
@@ -376,18 +405,24 @@ body.rl3-page.rl3--preview-bg {
     to { opacity: 0; transform: translateY(8px); }
 }
 
-/* ---------- In / out — quick and precise, no bounce ---------- */
+/* ---------- In / out ---------- */
 
 @keyframes rl3-wipe { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 @keyframes rl3-up { from { opacity: 0; transform: translateY(32px); } to { opacity: 1; transform: none; } }
+@keyframes rl3-rise { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: none; } }
+@keyframes rl3-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
 @keyframes rl3-fade-out { to { opacity: 0; transform: translateY(24px); } }
 
-.rl3--in .rl3-rail { animation: rl3-wipe 500ms var(--ease-out) both; }
-.rl3--in .rl3-rail > * { animation: rl3-up 400ms var(--ease-out) 200ms both; }
-.rl3--in .rl3-card { animation: rl3-up 450ms var(--ease-out) both; animation-delay: calc(250ms + var(--rl3-i, 0) * 40ms); }
+.rl3--in .rl3-hold { animation: rl3-rise 500ms var(--ease-out) both; }
+.rl3--in .rl3-hold-ridge { stroke-dasharray: 1; animation: rl3-draw 700ms var(--ease-standard) 250ms both; }
+.rl3--in .rl3-rail { animation: rl3-wipe 500ms var(--ease-out) 100ms both; transform-origin: right center; }
+.rl3--in .rl3-rail > * { animation: rl3-up 400ms var(--ease-out) 300ms both; }
+.rl3--in .rl3-card { animation: rl3-up 450ms var(--ease-out) both; animation-delay: calc(350ms + var(--rl3-i, 0) * 40ms); }
 .rl3--out .rl3 { animation: rl3-fade-out 300ms var(--ease-standard) both; }
 
 @media (prefers-reduced-motion: reduce) {
+    .rl3--in .rl3-hold,
+    .rl3--in .rl3-hold-ridge,
     .rl3--in .rl3-rail,
     .rl3--in .rl3-rail > *,
     .rl3--in .rl3-card,
@@ -398,34 +433,32 @@ body.rl3-page.rl3--preview-bg {
    A field showing its placeholder token (no live value yet) carries .rl3-ph. */
 
 .rl3-ph {
-    color: var(--alt-grey-500);
+    color: var(--mf-muted);
     font-style: italic;
-    text-decoration: underline dashed rgba(245, 240, 228, 0.45);
+    text-decoration: underline dashed rgba(255, 255, 255, 0.45);
     text-underline-offset: 5px;
     text-decoration-thickness: 1px;
 }
 
-.rl3-rail-num-val.rl3-ph { color: rgba(255, 255, 255, 0.8); }
-.rl3-rail-type[data-tier='final'].rl3-ph { color: var(--alt-grey-700); }
+.rl3-rail-type[data-tier].rl3-ph { color: var(--mf-muted); }
 
 .rl3-card-suit.rl3-ph {
-    background: repeating-linear-gradient(135deg, var(--alt-white) 0 10px, #edf0f3 10px 20px);
+    background: repeating-linear-gradient(135deg, var(--mf-white) 0 10px, #eef0f1 10px 20px);
 }
 
 .rl3-suit-tag {
     position: absolute;
     right: 5px;
     bottom: 4px;
-    font-family: var(--font-mono);
     font-size: 10px;
     font-weight: 700;
-    letter-spacing: var(--ls-label);
-    color: var(--alt-grey-700);
+    color: var(--mf-grey);
+    opacity: 0.7;
 }
 
 /* Guides (?guides=1 / G): outline every live field and name its key. */
 .rl3--guides [data-field] {
-    outline: 1px dashed rgba(46, 125, 224, 0.95);
+    outline: 1px dashed var(--mf-orange);
     outline-offset: -2px;
     position: relative;
 }
@@ -436,13 +469,13 @@ body.rl3-page.rl3--preview-bg {
     left: 2px;
     top: 2px;
     padding: 1px 4px;
-    font: 700 10px/1.2 var(--font-mono);
+    font: 700 10px/1.2 ui-monospace, Menlo, monospace;
     font-style: normal;
     letter-spacing: 0;
     text-transform: none;
-    color: var(--alt-white);
-    background: var(--alt-sky);
-    border-radius: 2px;
+    color: var(--mf-white);
+    background: var(--mf-orange);
+    border-radius: 3px;
     z-index: 3;
     white-space: nowrap;
 }
@@ -457,24 +490,25 @@ body.rl3-page.rl3--preview-bg {
     top: 24px;
     width: 460px;
     padding: 16px 18px;
-    background: var(--alt-carbon);
-    border: 1px solid var(--strap-hairline);
+    background: var(--mf-surface-deep);
+    border: 1px solid var(--mf-hairline);
     border-radius: 10px;
     font-size: 14px;
-    color: var(--alt-cream);
-    box-shadow: 0 20px 48px rgba(13, 17, 23, 0.2);
+    color: var(--mf-light);
+    box-shadow: 0 20px 48px rgba(0, 0, 0, 0.3);
     z-index: 10;
 }
 
 .rl3-ctrl h2 {
     margin: 0 0 10px;
-    font: 700 18px var(--font-display);
-    letter-spacing: var(--ls-display);
+    font-size: 18px;
+    font-weight: 500;
+    letter-spacing: var(--track-headline);
 }
 
 .rl3-ctrl fieldset {
-    border: 1px solid var(--alt-grey-700);
-    border-radius: 4px;
+    border: 1px solid var(--mf-hairline);
+    border-radius: 6px;
     margin: 0 0 10px;
     padding: 8px 10px 10px;
     display: grid;
@@ -484,10 +518,9 @@ body.rl3-page.rl3--preview-bg {
 
 .rl3-ctrl legend {
     padding: 0 4px;
-    color: var(--alt-sky);
-    font: 700 11px var(--font-mono);
-    letter-spacing: var(--ls-label);
-    text-transform: uppercase;
+    color: var(--mf-orange-65);
+    font-size: 12px;
+    font-weight: 700;
 }
 
 .rl3-ctrl label {
@@ -495,7 +528,7 @@ body.rl3-page.rl3--preview-bg {
     flex-direction: column;
     gap: 3px;
     font-size: 12px;
-    color: var(--alt-grey-300);
+    color: var(--mf-muted);
 }
 
 .rl3-ctrl label.rl3-ctrl-check {
@@ -509,12 +542,19 @@ body.rl3-page.rl3--preview-bg {
 .rl3-ctrl select {
     width: 100%;
     min-width: 0;
-    background: var(--alt-ink);
-    color: var(--alt-cream);
-    border: 1px solid var(--alt-grey-700);
-    border-radius: 3px;
-    padding: 5px 6px;
-    font: 500 14px var(--font-mono);
+    background: var(--mf-grey);
+    color: var(--mf-white);
+    border: 1px solid var(--mf-hairline);
+    border-radius: 6px;
+    padding: 5px 8px;
+    font: 500 14px var(--font);
+}
+
+.rl3-ctrl input:focus-visible,
+.rl3-ctrl select:focus-visible,
+.rl3-ctrl button:focus-visible {
+    outline: 2px solid var(--mf-orange);
+    outline-offset: 1px;
 }
 
 .rl3-ctrl-row {
@@ -524,25 +564,25 @@ body.rl3-page.rl3--preview-bg {
     margin-top: 6px;
 }
 
+.rl3-ctrl-row select { width: auto; }
+
 .rl3-ctrl button {
-    background: var(--alt-sky);
-    color: #fff;
+    background: var(--mf-orange);
+    color: var(--mf-white);
     border: 0;
-    border-radius: 6px;
-    padding: 6px 10px;
-    font: 600 13px var(--font-body);
+    border-radius: var(--radius-lozenge);
+    padding: 6px 12px;
+    font: 600 13px var(--font);
     cursor: pointer;
 }
 
 .rl3-ctrl button:hover { filter: brightness(0.92); }
 
-.rl3-ctrl-row select { width: auto; }
-
-.rl3-ctrl button.rl3-ctrl-alt { background: var(--alt-grey-700); }
+.rl3-ctrl button.rl3-ctrl-alt { background: var(--mf-grey); border: 1px solid var(--mf-hairline); }
 
 .rl3-ctrl-hint {
     margin: 8px 0 0;
-    color: var(--alt-grey-500);
+    color: var(--mf-muted);
     font-size: 12px;
     line-height: 1.45;
 }

@@ -4,27 +4,36 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=1920, height=1080, initial-scale=1">
     <title>vMix — Rowing lane lower third</title>
-    <link rel="preload" href="assets/fonts/altitudehd/SpaceGrotesk.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="preload" href="assets/fonts/altitudehd/JetBrainsMono.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="vmix-rowing-l3.css?v=2">
+    <link rel="preload" href="assets/fonts/milford/Montserrat-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="vmix-rowing-l3.css?v=3">
 </head>
 <body class="rl3-page">
     <!-- 1920×1080, transparent. Everything live is marked data-field; see vmix-rowing-l3.js header. -->
     <div class="rl3-stage" id="rl3Stage">
         <div class="rl3-safe" aria-hidden="true"></div>
         <section class="rl3" id="rl3" aria-label="Race lower third">
-            <div class="rl3-lanes" id="rl3Lanes"></div>
-            <div class="rl3-rail">
-                <div class="rl3-rail-num">
-                    <span class="rl3-rail-num-label">Race</span>
-                    <span class="rl3-rail-num-val" data-field="race.number"></span>
+            <div class="rl3-main">
+                <div class="rl3-lanes" id="rl3Lanes"></div>
+                <div class="rl3-rail">
+                    <div class="rl3-rail-num">
+                        <span class="rl3-rail-num-label">Race</span>
+                        <span class="rl3-rail-num-val" data-field="race.number"></span>
+                    </div>
+                    <div class="rl3-rail-title" data-field="race.title"></div>
+                    <div class="rl3-rail-type" data-field="race.type"></div>
                 </div>
-                <div class="rl3-rail-title" data-field="race.title"></div>
-                <div class="rl3-rail-type" data-field="race.type"></div>
+            </div>
+            <!-- Milford holding device: always bottom right; logo artwork used as supplied. -->
+            <div class="rl3-hold" aria-label="Milford">
+                <svg viewBox="0 0 250 210" preserveAspectRatio="none" aria-hidden="true">
+                    <path class="rl3-hold-fill" d="M0 210V150L38 128L70 96L96 74L118 44L134 26L146 12L152 8L160 18L176 34L192 58L214 86L250 120V210Z"/>
+                    <path class="rl3-hold-ridge" pathLength="1" d="M0 150L38 128L70 96L96 74L118 44L134 26L146 12L152 8L160 18L176 34L192 58L214 86L250 120"/>
+                </svg>
+                <div class="rl3-hold-logo"><img src="assets/vmix/milford/lower-logo-art.png" alt="Milford"></div>
             </div>
         </section>
         <aside class="rl3-ctrl" id="rl3Ctrl" hidden></aside>
     </div>
-    <script src="vmix-rowing-l3.js?v=2"></script>
+    <script src="vmix-rowing-l3.js?v=3"></script>
 </body>
 </html>
