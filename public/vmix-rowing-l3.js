@@ -17,7 +17,7 @@
  * the data for rules.hold seconds, then flips back; if both fire, the back shows both.
  *
  * Feeding data (any mix):
- *   URL      ?title=&num=&type=&lanes=9&paceDrop=2&rateRise=3&window=10&hold=5&cooldown=12
+ *   URL      ?title=&num=&type=&lanes=8&paceDrop=2&rateRise=3&window=10&hold=5&cooldown=12
  *            &data=<json url>&poll=1000   poll a JSON feed (shape below)
  *            &demo=1   sample crews + simulated telemetry
  *            &auto=0   don't animate in on load (use L / RowingL3.show())
@@ -30,7 +30,8 @@
  *   {
  *     race:  { title, number, type },          type: heat | rep | qf | sf | fa | fb | final | tt | free text
  *     rules: { pace: { enabled, drop, window }, rate: { enabled, rise, window }, hold, cooldown },
- *     lanes: [ { lane, name, code, suit, colors: ['#hex'], rules, split, rate } ],
+ *     laneCount: 1–9 | null,                  lanes in the race; null = the highest lane in the draw
+ *     lanes: [ { lane, name, code, suit, colors: ['#hex'], scratched, rules, split, rate } ],
  *     telemetry: [ { lane, split, rate } ],
  *     show: true | false
  *   }
@@ -40,6 +41,13 @@
  *            (needs the page served over http; from file:// the PNG shows as supplied).
  *   colors = placeholder suit colours, main colour first, when there is no suit image
  *   name   = full school/club name (optional; not shown)
+ *   scratched = true: the lane stays visible but shows no crew. A lane missing from the
+ *            draw (or with no code/name/suit) is shown the same way.
+ *
+ * Lane count: the graphic shows lanes 1…N and is as wide as N lane cards (left-anchored),
+ * so a 7-lane race is shorter than a 9-lane one. N = laneCount (or ?lanes=), else the highest
+ * lane in the draw; with no draw at all, 9 placeholder lanes. Set laneCount when the last
+ * lane is scratched, or it would drop off the end.
  *   split = seconds per 500 m (102.4) or "1:42.4"; rate = strokes per minute
  *
  * Keys: L in · O out · G guides · C control panel · B preview backdrop · D demo
@@ -93,7 +101,7 @@
         race: { title: null, number: null, type: null },
         rules: clone(DEFAULT_RULES),
         lanes: [],
-        laneCount: clampLanes(numParam('lanes', MAX_LANES)),
+        laneCount: q.get('lanes') ? clampLanes(numParam('lanes', MAX_LANES)) : null, // null = from the draw
         lookup: null,
         lookupPromise: null,
         shown: false,
@@ -226,9 +234,23 @@
 
     // ---------- lane cards ----------
 
+    /** A lane in the draw with no crew in it (scratched, or nothing to show). */
+    function isEmptyLane(l) {
+        return !l || l.scratched === true || (blank(l.code) && blank(l.name) && blank(l.suit));
+    }
+
+    /** Lanes 1…N, one card each. Lanes without a crew come back as { lane, empty: true }. */
     function laneList() {
-        if (state.lanes.length) return state.lanes;
-        return Array.from({ length: state.laneCount }, (_, i) => ({ lane: i + 1 }));
+        const hasDraw = state.lanes.length > 0;
+        const byLane = new Map(state.lanes.map((l) => [l.lane, l]));
+        const count =
+            state.laneCount ?? (hasDraw ? clampLanes(Math.max(...state.lanes.map((l) => l.lane))) : MAX_LANES);
+        return Array.from({ length: count }, (_, i) => {
+            const lane = i + 1;
+            const d = byLane.get(lane);
+            if (hasDraw && isEmptyLane(d)) return { lane, empty: true };
+            return d || { lane };
+        });
     }
 
     // ---------- row suits ----------
@@ -367,13 +389,14 @@
         const head = el('div', 'rl3-back-head');
         const backLane = el('div', 'rl3-card-lane rl3-card-lane--sm', String(lane));
         const backCode = el('div', 'rl3-back-code');
-        head.append(backLane, backCode);
+        const headLabel = el('div', 'rl3-back-label');
+        head.append(backLane, backCode, headLabel);
         const metrics = el('div', 'rl3-metrics');
         back.append(head, metrics);
 
         flip.append(front, back);
         root.append(flip);
-        return { root, back, suit, laneEl, code, backLane, backCode, metrics, suitKey: null, timer: 0 };
+        return { root, back, suit, laneEl, code, backLane, backCode, headLabel, metrics, suitKey: null, timer: 0 };
     }
 
     function paintSuit(card, data, info) {
@@ -418,15 +441,27 @@
             r.data = data;
             const c = r.card;
             c.root.style.setProperty('--rl3-i', i);
-            const info = club(data.code);
             c.laneEl.textContent = String(data.lane);
             c.backLane.textContent = String(data.lane);
-            setField(c.code, blank(data.code) ? null : String(data.code).trim().toUpperCase(), PH.code);
-            c.backCode.textContent = blank(data.code) ? '' : String(data.code).trim().toUpperCase();
-            paintSuit(c, data, info);
+            c.root.classList.toggle('rl3-card--empty', !!data.empty);
+            if (data.empty) {
+                // Lane is in the race but has no crew: show the lane number only.
+                unflip(r);
+                c.code.textContent = '';
+                c.code.classList.remove('rl3-ph');
+                c.backCode.textContent = '';
+                c.suit.replaceChildren();
+                c.suit.classList.remove('rl3-ph');
+                c.suitKey = 'empty';
+            } else {
+                const info = club(data.code);
+                setField(c.code, blank(data.code) ? null : String(data.code).trim().toUpperCase(), PH.code);
+                c.backCode.textContent = blank(data.code) ? '' : String(data.code).trim().toUpperCase();
+                paintSuit(c, data, info);
+            }
             lanesEl.appendChild(c.root); // keeps DOM order = list order
         });
-        if (!state.lookup && list.some((l) => !blank(l.code))) loadLookup();
+        if (!state.lookup && list.some((l) => !l.empty && !blank(l.code))) loadLookup();
     }
 
     // ---------- telemetry + triggers ----------
@@ -473,7 +508,7 @@
 
     /** Flip a lane's card to show the triggered data; holds, then flips back. */
     function flipCard(r, kind, info, rules) {
-        if (!state.shown) return;
+        if (!state.shown || r.data.empty) return;
         const c = r.card;
         const hold = (rules || rulesFor(r.data.lane)).hold * 1000;
         r.shown[kind] = info;
@@ -489,42 +524,80 @@
         }, hold);
     }
 
-    function metricNode(kind, info, compact) {
-        const node = el('div', `rl3-metric rl3-metric--${kind}${compact ? ' rl3-metric--compact' : ''}`);
-        const label = el('span', 'rl3-metric-label', kind === 'pace' ? 'Pace' : 'Rating');
-        const value = el('span', 'rl3-metric-value');
-        const delta = el('span', 'rl3-metric-delta');
-        if (kind === 'pace') {
-            value.textContent = fmtSplit(info.value);
-            value.appendChild(el('span', 'rl3-metric-unit', '/500'));
-            delta.textContent = Number.isFinite(info.delta) ? `${fmtSigned(info.delta, 1)}s` : '';
-        } else {
-            value.textContent = Number.isFinite(info.value) ? String(Math.round(info.value)) : '––';
-            value.appendChild(el('span', 'rl3-metric-unit', 'spm'));
-            delta.textContent = Number.isFinite(info.delta) ? fmtSigned(Math.round(info.delta), 0) : '';
-        }
-        node.append(label, delta, value);
+    function unflip(r) {
+        clearTimeout(r.card.timer);
+        r.card.root.classList.remove('rl3-card--flipped');
+        r.shown = {};
+    }
+
+    const METRIC = {
+        pace: {
+            label: 'Pace',
+            value: (info) => fmtSplit(info.value),
+            unit: '/500m',
+            delta: (info) => (Number.isFinite(info.delta) ? `${fmtSigned(info.delta, 1)}s` : ''),
+        },
+        rate: {
+            label: 'Rating',
+            value: (info) => (Number.isFinite(info.value) ? String(Math.round(info.value)) : '––'),
+            unit: 'spm',
+            delta: (info) => (Number.isFinite(info.delta) ? fmtSigned(Math.round(info.delta), 0) : ''),
+        },
+    };
+
+    // Value sizes (px): as large as the card width allows, down to the minimum.
+    const VALUE_FONT = { single: { max: 60, min: 30 }, compact: { max: 34, min: 20 } };
+
+    function labelNode(kind) {
+        return el('span', `rl3-metric-label rl3-metric-label--${kind}`, METRIC[kind].label);
+    }
+
+    /** Single metric: big value, unit + change underneath (label sits in the card header). */
+    function metricNode(kind, info) {
+        const m = METRIC[kind];
+        const node = el('div', `rl3-metric rl3-metric--${kind}`);
+        const foot = el('div', 'rl3-metric-foot');
+        foot.append(el('span', 'rl3-metric-unit', m.unit), el('span', 'rl3-metric-delta', m.delta(info)));
+        node.append(el('span', 'rl3-metric-value', m.value(info)), foot);
         return node;
+    }
+
+    /** Both metrics: two rows, each label · change / value + unit. */
+    function compactNode(kind, info) {
+        const m = METRIC[kind];
+        const node = el('div', `rl3-metric rl3-metric--${kind} rl3-metric--compact`);
+        const value = el('span', 'rl3-metric-value', m.value(info));
+        value.appendChild(el('span', 'rl3-metric-unit', m.unit));
+        node.append(labelNode(kind), el('span', 'rl3-metric-delta', m.delta(info)), value);
+        return node;
+    }
+
+    function fitText(node, { max, min }) {
+        let size = max;
+        node.style.fontSize = `${size}px`;
+        while (size > min && node.scrollWidth > node.clientWidth + 1) {
+            size -= 1;
+            node.style.fontSize = `${size}px`;
+        }
     }
 
     function renderMetrics(c, shown) {
         const kinds = ['pace', 'rate'].filter((k) => shown[k]);
         const compact = kinds.length > 1;
-        c.metrics.replaceChildren(...kinds.map((k) => metricNode(k, shown[k], compact)));
+        c.headLabel.replaceChildren(...(compact ? [] : kinds.map(labelNode)));
+        c.metrics.replaceChildren(...kinds.map((k) => (compact ? compactNode : metricNode)(k, shown[k])));
+        const font = compact ? VALUE_FONT.compact : VALUE_FONT.single;
+        for (const v of c.metrics.querySelectorAll('.rl3-metric-value')) fitText(v, font);
     }
 
     function resetFlips() {
-        for (const r of rt.values()) {
-            clearTimeout(r.card.timer);
-            r.card.root.classList.remove('rl3-card--flipped');
-            r.shown = {};
-        }
+        for (const r of rt.values()) unflip(r);
     }
 
     /** Manual / test flip using the lane's latest sample (or a plausible value). */
     function fire(lane, kind) {
         const r = rt.get(Number(lane));
-        if (!r) return;
+        if (!r || r.data.empty) return;
         const last = [...r.hist].reverse().find((s) => Number.isFinite(kind === 'pace' ? s.split : s.rate));
         const rules = rulesFor(r.data.lane);
         if (kind === 'pace') {
@@ -560,11 +633,13 @@
         if (!input || typeof input !== 'object') return;
         if (input.race) deepMerge(state.race, input.race);
         if (input.rules) deepMerge(state.rules, input.rules);
-        if (Number.isFinite(input.laneCount)) state.laneCount = clampLanes(input.laneCount);
+        if ('laneCount' in input) {
+            const n = Number(input.laneCount);
+            state.laneCount = input.laneCount == null || input.laneCount === '' || !Number.isFinite(n) ? null : clampLanes(n);
+        }
         if (Array.isArray(input.lanes)) {
             state.lanes = input.lanes
-                .filter((l) => l && Number.isFinite(Number(l.lane)))
-                .slice(0, MAX_LANES)
+                .filter((l) => l && Number.isInteger(Number(l.lane)) && Number(l.lane) >= 1 && Number(l.lane) <= MAX_LANES)
                 .map((l) => ({ ...l, lane: Number(l.lane) }));
         }
         renderRace();
@@ -606,7 +681,7 @@
     function startDemo() {
         if (state.demoTimer) return;
         if (!state.lanes.length) {
-            apply({ race: DEMO.race, lanes: demoLanes(state.laneCount) });
+            apply({ race: DEMO.race, lanes: demoLanes(state.laneCount ?? MAX_LANES) });
         }
         const sim = new Map();
         for (const l of laneList()) {
@@ -660,7 +735,7 @@
             ctrlField('Title', 'race.title', 'text'),
             ctrlField('Number', 'race.number', 'text'),
             ctrlField('Type (heat, qf, sf, fa…)', 'race.type', 'text'),
-            ctrlField('Lanes when no draw', 'laneCount', 'number', { min: 1, max: 9, step: 1 }),
+            ctrlField('Lanes in race (blank = from draw)', 'laneCount', 'number', { min: 1, max: 9, step: 1 }),
         );
 
         const pace = el('fieldset');
@@ -739,11 +814,11 @@
         const key = input.dataset?.key;
         if (!key) return;
         let v = input.type === 'checkbox' ? input.checked : input.value;
+        if (key === 'laneCount') return apply({ laneCount: v === '' ? null : Number(v) });
         if (input.type === 'number') {
             v = parseFloat(v);
             if (!Number.isFinite(v)) return;
         }
-        if (key === 'laneCount') return apply({ laneCount: v });
         const path = key.split('.');
         const patch = {};
         path.reduce((o, k, i) => (o[k] = i === path.length - 1 ? v : {}), patch);

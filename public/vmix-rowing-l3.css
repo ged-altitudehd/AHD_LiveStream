@@ -10,8 +10,10 @@
    - No logo or holding device here: Milford runs as a separate always-on bug, and the
      guide says the holding device is not used when the logo appears elsewhere.
    - Crews are shown by their row suit (white background cut out in the browser) and club code.
-   - Lane cards sit at ~45% opacity so the race shows through and flip over to show pace /
-     rating in place of the suit; the race number / title rail is solid Milford grey. Text carries a soft shadow over bright water. */
+   - Lane cards are 80% Milford grey and flip over to a near-solid (95%) data side for pace /
+     rating; the race number / title rail is solid Milford grey.
+   - One fixed-width card per lane, so the graphic is as wide as the race has lanes
+     (left-anchored at title safe); the rail matches that width. Text carries a soft shadow over bright water. */
 
 @font-face {
     font-family: 'Montserrat';
@@ -33,7 +35,9 @@
 
     /* Derived from Milford grey for broadcast surfaces */
     --mf-surface: #303c42;                  /* race rail: solid Milford grey */
-    --mf-card: rgba(48, 60, 66, 0.45);      /* lane cards (both faces): 45% so the race shows through */
+    --mf-card: rgba(48, 60, 66, 0.8);       /* lane card front: 80%, a hint of the race behind */
+    --mf-card-back: rgba(48, 60, 66, 0.95); /* flipped data side: near-solid so pace / rating read cleanly */
+    --mf-card-empty: rgba(48, 60, 66, 0.4); /* lane in the race with no crew */
     --mf-surface-deep: #232c31;
     --mf-hairline: rgba(247, 247, 247, 0.16);
     --mf-muted: rgba(247, 247, 247, 0.62);
@@ -49,7 +53,8 @@
     --ease-standard: cubic-bezier(0.2, 0, 0.2, 1);
 
     --rl3-gap: 8px;
-    --rl3-card-h: 150px;
+    --rl3-card-h: 170px;
+    --rl3-card-w: 184px;                     /* 9 lanes fill the 1728px title-safe width */
     --rl3-rail-h: 60px;
 }
 
@@ -92,13 +97,13 @@ body.rl3-page {
 
 .rl3--guides .rl3-safe { display: block; }
 
-/* ---------- Layout: lanes over the race rail ---------- */
+/* ---------- Layout: lanes over the race rail, as wide as the lanes ---------- */
 
 .rl3 {
     position: absolute;
     left: 96px;
-    right: 96px;
     bottom: 54px;
+    max-width: 1728px;
     display: flex;
     visibility: hidden;
 }
@@ -117,6 +122,12 @@ body.rl3-page {
     display: flex;
     gap: var(--rl3-gap);
     height: var(--rl3-card-h);
+}
+
+/* The rail takes the lanes' width but never widens the graphic itself. */
+.rl3-main > .rl3-rail {
+    width: 0;
+    min-width: 100%;
 }
 
 /* ---------- Race rail: number · title · type lozenge ---------- */
@@ -189,7 +200,7 @@ body.rl3-page {
 
 .rl3-card {
     position: relative;
-    flex: 1 1 0;
+    flex: 0 0 var(--rl3-card-w);
     min-width: 0;
     perspective: 900px;
 }
@@ -222,7 +233,12 @@ body.rl3-page {
 .rl3-face--back {
     transform: rotateY(180deg);
     gap: 6px;
+    background: var(--mf-card-back);
 }
+
+/* Lane in the race with no crew (scratched / empty): lane number only. */
+.rl3-card--empty .rl3-face--front { background: var(--mf-card-empty); box-shadow: none; }
+.rl3-card--empty .rl3-card-lane { opacity: 0.7; }
 
 /* Row suit: RowIT PNG with its white background and code caption removed in JS,
    so the suit sits straight on the translucent card. */
@@ -285,10 +301,11 @@ body.rl3-page {
 /* ---------- Card back: the triggered data ---------- */
 
 .rl3-back-head {
-    flex: 0 0 auto;
+    flex: 0 0 26px;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 7px;
+    min-width: 0;
 }
 
 .rl3-card-lane--sm {
@@ -299,6 +316,7 @@ body.rl3-page {
 }
 
 .rl3-back-code {
+    flex: 1 1 auto;
     min-width: 0;
     font-size: 16px;
     font-weight: 700;
@@ -308,69 +326,88 @@ body.rl3-page {
     text-overflow: ellipsis;
 }
 
+.rl3-back-label { flex: 0 0 auto; display: flex; }
+
 .rl3-metrics {
     flex: 1 1 auto;
     min-height: 0;
     display: flex;
     flex-direction: column;
     justify-content: center;
-    gap: 6px;
+    gap: 8px;
 }
 
 /* Pace = Milford orange; rating = 30% orange tint — both primary palette. */
-.rl3-metric--pace { --rl3-accent: var(--mf-orange); --rl3-on-accent: var(--mf-white); }
-.rl3-metric--rate { --rl3-accent: var(--mf-orange-30); --rl3-on-accent: var(--mf-grey); }
+.rl3-metric-label--pace { --rl3-accent: var(--mf-orange); --rl3-on-accent: var(--mf-white); }
+.rl3-metric-label--rate { --rl3-accent: var(--mf-orange-30); --rl3-on-accent: var(--mf-grey); }
 
+/* Label sits in a small lozenge. */
+.rl3-metric-label {
+    padding: 3px 9px 4px;
+    border-radius: 6px;
+    background: var(--rl3-accent);
+    color: var(--rl3-on-accent);
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.1;
+    text-shadow: none;
+    white-space: nowrap;
+}
+
+/* Single metric: the value is as large as the card width allows (fitted in JS). */
 .rl3-metric {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.rl3-metric-value {
+    display: block;
+    width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    font-size: 60px;
+    font-weight: 700;
+    line-height: 0.95;
+    letter-spacing: -0.03em;
+    color: var(--mf-white);
+}
+
+.rl3-metric-foot {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.rl3-metric-unit {
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 0;
+    color: var(--mf-light);
+    opacity: 0.8;
+}
+
+.rl3-metric-delta {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--mf-white);
+}
+
+/* Both triggers at once: two rows — label · change, then value + unit. */
+.rl3-metric--compact {
     display: grid;
     grid-template-columns: auto 1fr;
     align-items: center;
     column-gap: 8px;
-    row-gap: 6px;
+    row-gap: 3px;
 }
 
-/* Label sits in a small lozenge. */
-.rl3-metric-label {
-    justify-self: start;
-    padding: 2px 8px 3px;
-    border-radius: 6px;
-    background: var(--rl3-accent);
-    color: var(--rl3-on-accent);
-    font-size: 13px;
-    font-weight: 700;
-    text-shadow: none;
-}
-
-.rl3-metric-delta {
-    justify-self: end;
-    font-size: 16px;
-    font-weight: 700;
-    color: var(--mf-white); /* the label lozenge carries the colour; white stays legible over footage */
-}
-
-.rl3-metric-value {
-    grid-column: 1 / -1;
-    white-space: nowrap;
-    font-size: 36px;
-    font-weight: 600;
-    line-height: 1;
-    letter-spacing: var(--track-headline);
-}
-
-.rl3-metric-unit {
-    font-size: 14px;
-    font-weight: 500;
-    letter-spacing: 0;
-    color: var(--mf-muted);
-    margin-left: 4px;
-}
-
-/* Both triggers at once: two compact rows. */
-.rl3-metric--compact { row-gap: 2px; }
-.rl3-metric--compact .rl3-metric-label { font-size: 11px; padding: 1px 6px 2px; }
-.rl3-metric--compact .rl3-metric-delta { font-size: 13px; }
-.rl3-metric--compact .rl3-metric-value { font-size: 23px; }
-.rl3-metric--compact .rl3-metric-unit { font-size: 11px; }
+.rl3-metric--compact .rl3-metric-label { justify-self: start; font-size: 12px; padding: 2px 7px 3px; }
+.rl3-metric--compact .rl3-metric-delta { justify-self: end; font-size: 16px; }
+.rl3-metric--compact .rl3-metric-value { grid-column: 1 / -1; font-size: 34px; line-height: 1; }
+.rl3-metric--compact .rl3-metric-unit { font-size: 13px; margin-left: 4px; }
 
 /* ---------- In / out ---------- */
 
