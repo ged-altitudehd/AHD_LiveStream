@@ -125,10 +125,11 @@ body.rl3-page {
     height: var(--rl3-card-h);
 }
 
-/* The rail takes the lanes' width but never widens the graphic itself. */
+/* The rail takes the lanes' width but never widens the graphic itself; on short races
+   (5 lanes or fewer) it keeps at least 1000px so the title and gold standard fit. */
 .rl3-main > .rl3-rail {
     width: 0;
-    min-width: 100%;
+    min-width: max(100%, 1000px);
 }
 
 /* ---------- Race rail: number · title · type lozenge ---------- */
@@ -175,6 +176,53 @@ body.rl3-page {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+/* Gold standard, just before the race type: small label over the time and its
+   average split /500m (stacked so the title keeps its room on short rails). */
+.rl3-rail-gold {
+    flex: 0 0 auto;
+    display: grid;
+    grid-template-columns: auto auto;
+    align-items: baseline;
+    column-gap: 10px;
+    row-gap: 1px;
+    padding-left: 18px;
+    border-left: 1px solid var(--mf-hairline);
+    white-space: nowrap;
+}
+
+.rl3-rail-gold[hidden] { display: none; }
+
+.rl3-rail-gold-label {
+    grid-column: 1 / -1;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.1;
+    color: var(--mf-orange-65);
+}
+
+.rl3-rail-gold-time {
+    font-size: 24px;
+    line-height: 1.05;
+    font-weight: 600;
+    letter-spacing: var(--track-headline);
+}
+
+.rl3-rail-gold-split {
+    font-size: 19px;
+    line-height: 1.05;
+    font-weight: 600;
+    letter-spacing: var(--track-headline);
+    color: var(--mf-light);
+}
+
+.rl3-rail-gold-unit {
+    margin-left: 3px;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0;
+    color: var(--mf-muted);
 }
 
 /* Lozenge highlight (brand: Gotham/Montserrat only, text fits comfortably, rounded corners). */

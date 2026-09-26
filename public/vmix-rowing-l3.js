@@ -3,7 +3,7 @@
  *
  * Live fields (all marked data-field; shown as dashed/italic placeholders until
  * a live value arrives):
- *   race.title · race.number · race.type · lane[n].code · lane[n].suit   (n = 1–9)
+ *   race.title · race.number · race.type · race.gold · race.goldSplit · lane[n].code · lane[n].suit   (n = 1–9)
  *
  * Lane cards show the crew's row suit and the school/club code (e.g. AGSB), not the
  * full name. Suits come from assets/school-logos: 189 clubs have the detailed 1890px
@@ -21,7 +21,7 @@
  * overrides (lanes[i].rules).
  *
  * Feeding data (any mix):
- *   URL      ?title=&num=&type=&lanes=8&paceDrop=2&rateRise=3&window=10&hold=5&cooldown=12
+ *   URL      ?title=&num=&type=&gold=5:18.68&dist=2000&lanes=8&paceDrop=2&rateRise=3&window=10&hold=5&cooldown=12
  *            &data=<json url>&poll=1000   poll a JSON feed (shape below)
  *            &demo=1   sample crews + simulated telemetry
  *            &auto=0   don't animate in on load (use L / RowingL3.show())
@@ -32,7 +32,13 @@
  *
  * State shape (every key optional):
  *   {
- *     race:  { title, number, type },          type: heat | rep | qf | sf | fa | fb | final | tt | free text
+ *     race:  { title, number, type, gold, goldSplit, distance },
+ *            type: heat | rep | qf | sf | fa | fb | final | tt | free text
+ *            gold = gold-standard time for the event ("5:18.68" or seconds); shown on the
+ *            title bar next to the race type with its average split /500m, which is
+ *            gold ÷ (distance / 500) unless goldSplit is given. distance defaults to 2000.
+ *            No gold → the block is hidden (it shows as a placeholder only while the
+ *            whole race is still placeholders).
  *     rules: { pace: { enabled, drop, window }, rate: { enabled, rise, window }, hold, cooldown },
  *     laneCount: 1–9 | null,                  lanes in the race; null = the highest lane in the draw
  *     lanes: [ { lane, name, code, suit, colors: ['#hex'], scratched, rules, split, rate } ],
@@ -66,6 +72,8 @@
         'race.title': 'Race title',
         'race.number': '00',
         'race.type': 'RACE TYPE',
+        'race.gold': '0:00.00',
+        'race.goldSplit': '0:00.0',
         code: 'CODE',
     };
 
@@ -91,7 +99,7 @@
     };
 
     const DEMO = {
-        race: { title: "Schoolboy U18 Eight", number: '42', type: 'fa' },
+        race: { title: "Schoolboy U18 Eight", number: '42', type: 'fa', gold: '5:40.00' }, // sample gold standard
         lanes: ['agsb', 'kgca', 'stpc', 'hamb', 'cbhs', 'rotb', 'nelb', 'rgtt', 'chco'],
     };
 
@@ -234,6 +242,39 @@
         const t = raceType(state.race.type);
         setField(typeEl, t.label, PH['race.type']);
         typeEl.dataset.tier = t.tier;
+        renderGold();
+    }
+
+    /** "5:18.68" | "318.68" | 318.68 → "5:18.68" (two decimals), or null. */
+    function fmtRaceTime(sec) {
+        if (!Number.isFinite(sec) || sec <= 0) return null;
+        const m = Math.floor(sec / 60);
+        const s = sec - m * 60;
+        return `${m}:${s.toFixed(2).padStart(5, '0')}`;
+    }
+
+    /** Gold standard: time + average split /500m, next to the race type. */
+    function renderGold() {
+        const race = state.race;
+        const box = document.getElementById('rl3Gold');
+        const timeEl = box.querySelector('[data-field="race.gold"]');
+        const splitEl = box.querySelector('[data-field="race.goldSplit"]');
+        const sec = parseSplit(race.gold);
+        const time = blank(race.gold) ? null : fmtRaceTime(sec) || String(race.gold).trim();
+        const dist = Number(race.distance) > 0 ? Number(race.distance) : 2000;
+        let split = null;
+        if (!blank(race.goldSplit)) {
+            const g = parseSplit(race.goldSplit);
+            split = Number.isFinite(g) ? fmtSplit(g) : String(race.goldSplit).trim();
+        } else if (Number.isFinite(sec) && sec > 0) {
+            split = fmtSplit(sec / (dist / 500));
+        }
+        // Placeholder only while the whole race is placeholders; a live race without a
+        // gold standard simply doesn't show the block.
+        const placeholderRace = blank(race.title) && blank(race.number) && blank(race.type);
+        box.hidden = !time && !placeholderRace;
+        setField(timeEl, time, PH['race.gold']);
+        setField(splitEl, split, PH['race.goldSplit']);
     }
 
     // ---------- lane cards ----------
@@ -815,6 +856,8 @@
             ctrlField('Title', 'race.title', 'text'),
             ctrlField('Number', 'race.number', 'text'),
             ctrlField('Type (heat, qf, sf, fa…)', 'race.type', 'text'),
+            ctrlField('Gold standard (m:ss.00)', 'race.gold', 'text'),
+            ctrlField('Distance (m)', 'race.distance', 'number', { min: 100, step: 50 }),
             ctrlField('Lanes in race (blank = from draw)', 'laneCount', 'number', { min: 1, max: 9, step: 1 }),
         );
 
@@ -946,7 +989,13 @@
     // ---------- boot ----------
 
     const boot = {
-        race: { title: q.get('title'), number: q.get('num') ?? q.get('number'), type: q.get('type') },
+        race: {
+            title: q.get('title'),
+            number: q.get('num') ?? q.get('number'),
+            type: q.get('type'),
+            gold: q.get('gold'),
+            distance: q.get('dist') ? numParam('dist', 2000) : null,
+        },
         rules: {
             pace: { drop: numParam('paceDrop', DEFAULT_RULES.pace.drop), window: numParam('paceWindow', numParam('window', DEFAULT_RULES.pace.window)) },
             rate: { rise: numParam('rateRise', DEFAULT_RULES.rate.rise), window: numParam('rateWindow', numParam('window', DEFAULT_RULES.rate.window)) },

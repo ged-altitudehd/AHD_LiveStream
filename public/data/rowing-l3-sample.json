@@ -2,7 +2,8 @@
   "race": {
     "title": "Schoolboy U18 Eight",
     "number": "42",
-    "type": "fa"
+    "type": "fa",
+    "gold": "5:40.00"
   },
   "rules": {
     "pace": {
