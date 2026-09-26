@@ -253,7 +253,8 @@ body.rl3-page {
 }
 
 .rl3-suit-img {
-    max-height: 100%;
+    height: 100%;        /* same height for the 1890px renders and RowIT's 55×90 pictures */
+    width: auto;
     max-width: 100%;
     object-fit: contain;
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35));

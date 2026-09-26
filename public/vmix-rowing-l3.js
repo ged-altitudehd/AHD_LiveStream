@@ -5,8 +5,11 @@
  * a live value arrives):
  *   race.title · race.number · race.type · lane[n].code · lane[n].suit   (n = 1–9)
  *
- * Lane cards show the crew's row suit (white background cut out) and the
- * school/club code (e.g. AGSB), not the full name.
+ * Lane cards show the crew's row suit and the school/club code (e.g. AGSB), not the
+ * full name. Suits come from assets/school-logos: 189 clubs have the detailed 1890px
+ * renders (from the AHD lookup); the rest only have RowIT's small 55×90 pictures. Either
+ * way the white page and code caption are cut away in the browser and every suit is
+ * shown at the same height.
  * Styled to the Milford Asset Management brand guidelines (see vmix-rowing-l3.css).
  *
  * Programmable lane cards — within a rolling window, when that crew's
@@ -291,82 +294,182 @@
         return suitCache.get(url);
     }
 
-    /**
-     * RowIT suit PNGs: suit on a white (or transparent) square with the club code
-     * printed underneath. Drops the caption (the last band of rows in the lower half),
-     * flood-fills the background in from the edges so white parts of the suit itself
-     * survive, then trims to the suit.
-     */
-    function cutout(img) {
-        const H = Math.min(240, img.naturalHeight || 240);
+    // Same approach as the on-air Karāpiro suit cutouts (vmix-karapiro.js cropSinglet /
+    // punchPaper): drop the code caption, flood-fill the white page in from the edges
+    // with 1px outline gaps sealed, so white panels in the design survive. Run at a
+    // reduced working height (the renders are 1890px) and output at display size.
+    const SUIT_WORK_H = 720;
+    const SUIT_OUT_H = 240;
+
+    const isPaper = (d, p) => d[p + 3] < 40 || (d[p] > 250 && d[p + 1] > 250 && d[p + 2] > 250);
+
+    function suitCanvas(img, h) {
+        const H = Math.min(h, img.naturalHeight || h);
         const W = Math.max(1, Math.round((H * img.naturalWidth) / img.naturalHeight));
         const cv = document.createElement('canvas');
         cv.width = W;
         cv.height = H;
         const ctx = cv.getContext('2d', { willReadFrequently: true });
+        ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(img, 0, 0, W, H);
-        const im = ctx.getImageData(0, 0, W, H);
-        const px = im.data;
-        const isBg = (i) => px[i * 4 + 3] < 40 || Math.min(px[i * 4], px[i * 4 + 1], px[i * 4 + 2]) > 232;
+        return cv;
+    }
 
-        // Caption: last run of occupied rows, if it starts in the lower half after a gap.
-        const occ = new Array(H).fill(0);
-        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (!isBg(y * W + x)) occ[y]++;
+    /** Garment only: rows above the club-code caption band, cropped to the ink. */
+    function cropSinglet(cv) {
+        const { width: w, height: h } = cv;
+        const d = cv.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, w, h).data;
+        const occ = new Array(h).fill(0);
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (!isPaper(d, (y * w + x) * 4)) occ[y]++;
+        const minRow = Math.max(1, Math.round(w * 0.002));
         const runs = [];
-        for (let y = 0; y < H; ) {
-            while (y < H && !occ[y]) y++;
+        for (let y = 0; y < h; ) {
+            while (y < h && occ[y] < minRow) y++;
             const start = y;
-            while (y < H && occ[y]) y++;
+            while (y < h && occ[y] >= minRow) y++;
             if (y > start) runs.push(start);
         }
-        const rows = runs.length >= 2 && runs[runs.length - 1] > H * 0.5 ? runs[runs.length - 1] : H;
-
-        const bg = new Uint8Array(W * H);
-        for (let i = rows * W; i < W * H; i++) bg[i] = 1;
-        const stack = [];
-        const seed = (i) => {
-            if (!bg[i] && isBg(i)) {
-                bg[i] = 1;
-                stack.push(i);
-            }
-        };
-        for (let x = 0; x < W; x++) seed(x);
-        for (let y = 0; y < rows; y++) {
-            seed(y * W);
-            seed(y * W + W - 1);
-        }
-        if (rows > 0) for (let x = 0; x < W; x++) seed((rows - 1) * W + x);
-        while (stack.length) {
-            const i = stack.pop();
-            const x = i % W;
-            if (x > 0) seed(i - 1);
-            if (x < W - 1) seed(i + 1);
-            if (i >= W) seed(i - W);
-            if (i + W < W * H) seed(i + W);
-        }
-
-        let minX = W;
-        let minY = H;
+        const yLimit = runs.length >= 2 && runs[runs.length - 1] > h * 0.5 ? runs[runs.length - 1] : h;
+        let minX = w;
+        let minY = h;
         let maxX = -1;
         let maxY = -1;
-        for (let i = 0; i < W * H; i++) {
-            if (bg[i]) {
-                px[i * 4 + 3] = 0;
-                continue;
+        for (let y = 0; y < yLimit; y++) {
+            for (let x = 0; x < w; x++) {
+                if (isPaper(d, (y * w + x) * 4)) continue;
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
             }
-            const x = i % W;
-            const y = (i / W) | 0;
-            if (x < minX) minX = x;
-            if (x > maxX) maxX = x;
-            if (y < minY) minY = y;
-            if (y > maxY) maxY = y;
         }
         if (maxX < 0) throw new Error('empty suit');
-        ctx.putImageData(im, 0, 0);
+        minX = Math.max(0, minX - 2);
+        minY = Math.max(0, minY - 2);
+        maxX = Math.min(w - 1, maxX + 2);
+        maxY = Math.min(h - 1, maxY + 2);
         const out = document.createElement('canvas');
         out.width = maxX - minX + 1;
         out.height = maxY - minY + 1;
         out.getContext('2d').drawImage(cv, minX, minY, out.width, out.height, 0, 0, out.width, out.height);
+        return out;
+    }
+
+    /** 3×3 dilate then erode: closes 1px gaps in the outline without sealing the neck or armholes. */
+    function closeMask(src, w, h) {
+        const grow = new Uint8Array(src);
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                if (!src[y * w + x]) continue;
+                for (let dy = -1; dy <= 1; dy++) {
+                    for (let dx = -1; dx <= 1; dx++) {
+                        const nx = x + dx;
+                        const ny = y + dy;
+                        if (nx >= 0 && ny >= 0 && nx < w && ny < h) grow[ny * w + nx] = 1;
+                    }
+                }
+            }
+        }
+        const out = new Uint8Array(grow);
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                if (!grow[y * w + x]) continue;
+                let keep = 1;
+                for (let dy = -1; dy <= 1 && keep; dy++) {
+                    for (let dx = -1; dx <= 1; dx++) {
+                        const nx = x + dx;
+                        const ny = y + dy;
+                        if (nx < 0 || ny < 0 || nx >= w || ny >= h || !grow[ny * w + nx]) {
+                            keep = 0;
+                            break;
+                        }
+                    }
+                }
+                if (!keep) out[y * w + x] = 0;
+            }
+        }
+        return out;
+    }
+
+    /** Make the page transparent (flood fill from the edges), then trim to the suit. */
+    function punchPaper(cv) {
+        const { width: w, height: h } = cv;
+        const n = w * h;
+        const ctx = cv.getContext('2d', { willReadFrequently: true });
+        const im = ctx.getImageData(0, 0, w, h);
+        const d = im.data;
+        const wall = new Uint8Array(n);
+        for (let i = 0; i < n; i++) if (!isPaper(d, i * 4)) wall[i] = 1;
+        const sealed = closeMask(wall, w, h);
+        const outside = new Uint8Array(n);
+        const stack = [];
+        const push = (x, y) => {
+            if (x < 0 || y < 0 || x >= w || y >= h) return;
+            const i = y * w + x;
+            if (outside[i] || sealed[i] || !isPaper(d, i * 4)) return;
+            outside[i] = 1;
+            stack.push(i);
+        };
+        for (let x = 0; x < w; x++) {
+            push(x, 0);
+            push(x, h - 1);
+        }
+        for (let y = 0; y < h; y++) {
+            push(0, y);
+            push(w - 1, y);
+        }
+        while (stack.length) {
+            const i = stack.pop();
+            const x = i % w;
+            const y = (i / w) | 0;
+            push(x - 1, y);
+            push(x + 1, y);
+            push(x, y - 1);
+            push(x, y + 1);
+        }
+        for (let i = 0; i < n; i++) if (outside[i]) d[i * 4 + 3] = 0;
+        // White pixels left touching the cut edge are page, not design.
+        const clear = (x, y) => x < 0 || y < 0 || x >= w || y >= h || d[(y * w + x) * 4 + 3] < 16;
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                const p = (y * w + x) * 4;
+                if (d[p + 3] < 16 || !isPaper(d, p)) continue;
+                if (clear(x - 1, y) || clear(x + 1, y) || clear(x, y - 1) || clear(x, y + 1)) d[p + 3] = 0;
+            }
+        }
+        ctx.putImageData(im, 0, 0);
+
+        let minX = w;
+        let minY = h;
+        let maxX = -1;
+        let maxY = -1;
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                if (d[(y * w + x) * 4 + 3] < 16) continue;
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+            }
+        }
+        if (maxX < 0) throw new Error('empty suit');
+        const out = document.createElement('canvas');
+        out.width = maxX - minX + 1;
+        out.height = maxY - minY + 1;
+        out.getContext('2d').drawImage(cv, minX, minY, out.width, out.height, 0, 0, out.width, out.height);
+        return out;
+    }
+
+    function cutout(img) {
+        const suit = punchPaper(cropSinglet(suitCanvas(img, SUIT_WORK_H)));
+        const H = Math.min(SUIT_OUT_H, suit.height);
+        const W = Math.max(1, Math.round((H * suit.width) / suit.height));
+        const out = document.createElement('canvas');
+        out.width = W;
+        out.height = H;
+        const ctx = out.getContext('2d');
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(suit, 0, 0, W, H);
         return out.toDataURL('image/png');
     }
 
