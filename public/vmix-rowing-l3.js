@@ -20,6 +20,11 @@
  * Both hold for rules.hold seconds. Rules are global with optional per-lane
  * overrides (lanes[i].rules).
  *
+ * Race positions: the crews placed 1st, 2nd and 3rd get an animated gold, silver or
+ * bronze border on their card. Positions come from lanes[].position / telemetry[].position
+ * / positions (explicit), otherwise they are ranked from distance covered
+ * (lanes[].distance / telemetry[].distance, metres). positions: null clears them.
+ *
  * Feeding data (any mix):
  *   URL      ?title=&num=&type=&gold=5:18.68&dist=2000&lanes=8&paceDrop=2&rateRise=3&window=10&hold=5&cooldown=12
  *            &data=<json url>&poll=1000   poll a JSON feed (shape below)
@@ -42,7 +47,9 @@
  *     rules: { pace: { enabled, drop, window }, rate: { enabled, rise, window }, hold, cooldown },
  *     laneCount: 1–9 | null,                  lanes in the race; null = the highest lane in the draw
  *     lanes: [ { lane, name, code, suit, colors: ['#hex'], scratched, rules, split, rate } ],
- *     telemetry: [ { lane, split, rate } ],
+ *     telemetry: [ { lane, split, rate, distance, position } ],
+ *     positions: { "4": 1, "2": 2, "6": 3 } | [4, 2, 6] (lanes in race order) | null,
+ *     medals: true | false,                   medal borders on/off (?medals=0)
  *     show: true | false
  *   }
  *   code   = RowIT club code, shown on the card; also finds the row-suit PNG in data/ahd-lookup.json
@@ -114,6 +121,9 @@
         rules: clone(DEFAULT_RULES),
         lanes: [],
         laneCount: q.get('lanes') ? clampLanes(numParam('lanes', MAX_LANES)) : null, // null = from the draw
+        positions: new Map(), // lane → explicit race position
+        distances: new Map(), // lane → metres covered (ranked when no explicit positions)
+        medals: q.get('medals') !== '0',
         lookup: null,
         lookupPromise: null,
         shown: false,
@@ -550,7 +560,11 @@
         rate.append(rateValue, el('span', 'rl3-rate-unit', 'SPM'));
 
         flip.append(front, back);
-        root.append(flip, rate);
+        // Medal ring (gold / silver / bronze by race position), drawn over the card edge.
+        const medal = el('div', 'rl3-medal');
+        medal.setAttribute('aria-hidden', 'true');
+
+        root.append(flip, medal, rate);
         return {
             root, back, suit, laneEl, code, backLane, backCode, splitValue, splitDelta,
             rate, rateValue, suitKey: null, timer: 0, rateTimer: 0,
@@ -620,6 +634,51 @@
             lanesEl.appendChild(c.root); // keeps DOM order = list order
         });
         if (!state.lookup && list.some((l) => !l.empty && !blank(l.code))) loadLookup();
+    }
+
+    // ---------- race positions → medal borders ----------
+
+    const MEDALS = ['gold', 'silver', 'bronze'];
+
+    /** lane → position: explicit positions win; otherwise rank by distance covered. */
+    function currentPositions() {
+        if (state.positions.size) return state.positions;
+        const ranked = [...state.distances].filter(([, d]) => Number.isFinite(d)).sort((a, b) => b[1] - a[1]);
+        return new Map(ranked.map(([lane], i) => [lane, i + 1]));
+    }
+
+    function renderMedals() {
+        const pos = state.medals ? currentPositions() : new Map();
+        for (const [lane, r] of rt) {
+            const p = r.data.empty ? 0 : pos.get(lane) || 0;
+            const medal = MEDALS[p - 1] || '';
+            if ((r.card.root.dataset.medal || '') !== medal) {
+                if (medal) r.card.root.dataset.medal = medal;
+                else delete r.card.root.dataset.medal;
+            }
+        }
+    }
+
+    /** positions input: { lane: pos } | [lane, lane, …] in race order | null. */
+    function setPositions(p) {
+        state.positions = new Map();
+        if (Array.isArray(p)) {
+            p.forEach((lane, i) => Number.isFinite(Number(lane)) && state.positions.set(Number(lane), i + 1));
+        } else if (p && typeof p === 'object') {
+            for (const [lane, pos] of Object.entries(p)) {
+                if (Number.isFinite(Number(lane)) && Number(pos) > 0) state.positions.set(Number(lane), Number(pos));
+            }
+        }
+    }
+
+    /** Per-lane position / distance fields from lanes[] or telemetry[] entries. */
+    function takeRaceData(entries) {
+        for (const e of entries) {
+            if (!e || !Number.isFinite(Number(e.lane))) continue;
+            const lane = Number(e.lane);
+            if (e.position != null && Number(e.position) > 0) state.positions.set(lane, Number(e.position));
+            if (e.distance != null && Number.isFinite(Number(e.distance))) state.distances.set(lane, Number(e.distance));
+        }
     }
 
     // ---------- telemetry + triggers ----------
@@ -762,9 +821,17 @@
             state.lanes = input.lanes
                 .filter((l) => l && Number.isInteger(Number(l.lane)) && Number(l.lane) >= 1 && Number(l.lane) <= MAX_LANES)
                 .map((l) => ({ ...l, lane: Number(l.lane) }));
+            // A new draw starts from its own positions / distances (if it carries any).
+            state.positions = new Map();
+            state.distances = new Map();
+            takeRaceData(state.lanes);
         }
+        if ('positions' in input) setPositions(input.positions);
+        if (Array.isArray(input.telemetry)) takeRaceData(input.telemetry);
+        if (typeof input.medals === 'boolean') state.medals = input.medals;
         renderRace();
         renderLanes();
+        renderMedals();
         syncCtrl();
         if (Array.isArray(input.lanes)) {
             for (const l of input.lanes) {
@@ -807,9 +874,10 @@
         const sim = new Map();
         for (const l of laneList()) {
             sim.set(l.lane, {
-                split: 100 + Math.random() * 6,
+                split: 100 + Math.random() * 1.6,
                 rate: 33 + Math.random() * 3,
                 pushAt: now() + 4 + Math.random() * 20,
+                dist: 0,
             });
         }
         // Push envelope: ramp 3 s, hold 5 s, ease back over 10 s.
@@ -822,8 +890,11 @@
                 const k = kick(dt);
                 const split = s.split - 3.4 * k + (Math.random() - 0.5) * 0.6;
                 const rate = s.rate + 4.6 * k + (Math.random() - 0.5) * 0.8;
+                s.dist += (0.5 * 500) / split; // metres in this 0.5 s step
+                state.distances.set(lane, s.dist);
                 telemetry(lane, split, rate, t);
             }
+            renderMedals();
         };
         state.demoTimer = setInterval(step, 500);
     }
@@ -859,6 +930,7 @@
             ctrlField('Gold standard (m:ss.00)', 'race.gold', 'text'),
             ctrlField('Distance (m)', 'race.distance', 'number', { min: 100, step: 50 }),
             ctrlField('Lanes in race (blank = from draw)', 'laneCount', 'number', { min: 1, max: 9, step: 1 }),
+            ctrlField('Medal borders (1st–3rd)', 'medals', 'checkbox'),
         );
 
         const pace = el('fieldset');
@@ -977,6 +1049,7 @@
     window.RowingL3 = {
         apply,
         telemetry,
+        positions: (p) => apply({ positions: p }),
         fire,
         show,
         hide,
