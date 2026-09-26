@@ -9,11 +9,12 @@
  * school/club code (e.g. AGSB), not the full name.
  * Styled to the Milford Asset Management brand guidelines (see vmix-rowing-l3.css).
  *
- * Programmable lane cards — a sub-card pops above a lane when, within a rolling
- * window, that crew's
+ * Programmable lane cards — a lane's card flips over to show the data in place of
+ * the suit when, within a rolling window, that crew's
  *   pace:  split (sec/500 m) drops by more than rules.pace.drop seconds, or
  *   rate:  stroke rating rises by more than rules.rate.rise spm.
- * Rules are global with optional per-lane overrides (lanes[i].rules).
+ * Rules are global with optional per-lane overrides (lanes[i].rules). The card holds
+ * the data for rules.hold seconds, then flips back; if both fire, the back shows both.
  *
  * Feeding data (any mix):
  *   URL      ?title=&num=&type=&lanes=9&paceDrop=2&rateRise=3&window=10&hold=5&cooldown=12
@@ -42,7 +43,7 @@
  *   split = seconds per 500 m (102.4) or "1:42.4"; rate = strokes per minute
  *
  * Keys: L in · O out · G guides · C control panel · B preview backdrop · D demo
- *       1–9 test pace pop on lane · Shift+1–9 test rate pop.
+ *       1–9 test pace flip on lane · Shift+1–9 test rating flip.
  */
 (function () {
     const MAX_LANES = 9;
@@ -100,7 +101,7 @@
         pollTimer: 0,
     };
 
-    /** lane number → { lane data, card elements, telemetry history, pop-up state } */
+    /** lane number → { lane data, card elements, telemetry history, flip state } */
     const rt = new Map();
 
     // ---------- utils ----------
@@ -346,9 +347,12 @@
         return out.toDataURL('image/png');
     }
 
+    /** Two-sided card: front = suit + lane + code; back = the triggered data. */
     function makeCard(lane) {
         const root = el('div', 'rl3-card');
-        const subs = el('div', 'rl3-subs');
+        const flip = el('div', 'rl3-card-flip');
+
+        const front = el('div', 'rl3-face rl3-face--front');
         const suit = el('div', 'rl3-card-suit');
         suit.dataset.field = `lane${lane}.suit`;
         const row = el('div', 'rl3-card-row');
@@ -356,8 +360,20 @@
         const code = el('div', 'rl3-card-code');
         code.dataset.field = `lane${lane}.code`;
         row.append(laneEl, code);
-        root.append(subs, suit, row);
-        return { root, subs, suit, laneEl, code, suitKey: null };
+        front.append(suit, row);
+
+        const back = el('div', 'rl3-face rl3-face--back');
+        back.setAttribute('aria-hidden', 'true');
+        const head = el('div', 'rl3-back-head');
+        const backLane = el('div', 'rl3-card-lane rl3-card-lane--sm', String(lane));
+        const backCode = el('div', 'rl3-back-code');
+        head.append(backLane, backCode);
+        const metrics = el('div', 'rl3-metrics');
+        back.append(head, metrics);
+
+        flip.append(front, back);
+        root.append(flip);
+        return { root, back, suit, laneEl, code, backLane, backCode, metrics, suitKey: null, timer: 0 };
     }
 
     function paintSuit(card, data, info) {
@@ -396,7 +412,7 @@
         list.forEach((data, i) => {
             let r = rt.get(data.lane);
             if (!r) {
-                r = { data, card: makeCard(data.lane), hist: [], base: { pace: -Infinity, rate: -Infinity }, cool: { pace: -Infinity, rate: -Infinity }, pops: {} };
+                r = { data, card: makeCard(data.lane), hist: [], base: { pace: -Infinity, rate: -Infinity }, cool: { pace: -Infinity, rate: -Infinity }, shown: {} };
                 rt.set(data.lane, r);
             }
             r.data = data;
@@ -404,7 +420,9 @@
             c.root.style.setProperty('--rl3-i', i);
             const info = club(data.code);
             c.laneEl.textContent = String(data.lane);
+            c.backLane.textContent = String(data.lane);
             setField(c.code, blank(data.code) ? null : String(data.code).trim().toUpperCase(), PH.code);
+            c.backCode.textContent = blank(data.code) ? '' : String(data.code).trim().toUpperCase();
             paintSuit(c, data, info);
             lanesEl.appendChild(c.root); // keeps DOM order = list order
         });
@@ -435,7 +453,7 @@
             if (drop > rules.pace.drop && t >= r.cool.pace) {
                 r.cool.pace = t + rules.cooldown;
                 r.base.pace = t;
-                pop(r, 'pace', { value: cur.split, delta: -drop }, rules);
+                flipCard(r, 'pace', { value: cur.split, delta: -drop }, rules);
             }
         }
         if (rules.rate.enabled && Number.isFinite(cur.rate)) {
@@ -446,65 +464,73 @@
             if (rise > rules.rate.rise && t >= r.cool.rate) {
                 r.cool.rate = t + rules.cooldown;
                 r.base.rate = t;
-                pop(r, 'rate', { value: cur.rate, delta: rise }, rules);
+                flipCard(r, 'rate', { value: cur.rate, delta: rise }, rules);
             }
         }
     }
 
-    function pop(r, kind, info, rules) {
+    const FLIP_MS = 600; // matches .rl3-card-flip transition
+
+    /** Flip a lane's card to show the triggered data; holds, then flips back. */
+    function flipCard(r, kind, info, rules) {
         if (!state.shown) return;
+        const c = r.card;
         const hold = (rules || rulesFor(r.data.lane)).hold * 1000;
-        let p = r.pops[kind];
-        if (p) {
-            clearTimeout(p.timer);
-            p.el.classList.remove('rl3-sub--out');
-        } else {
-            const node = el('div', `rl3-sub rl3-sub--${kind}`);
-            p = r.pops[kind] = { el: node, timer: 0 };
-            node.append(el('span', 'rl3-sub-label'), el('span', 'rl3-sub-value'), el('span', 'rl3-sub-delta'));
-            r.card.subs.appendChild(node);
-        }
-        const [label, value, delta] = p.el.children;
-        if (kind === 'pace') {
-            label.textContent = 'Pace';
-            value.textContent = fmtSplit(info.value);
-            value.appendChild(el('span', 'rl3-sub-unit', '/500'));
-            delta.textContent = Number.isFinite(info.delta) ? `${fmtSigned(info.delta, 1)}s` : '';
-        } else {
-            label.textContent = 'Rating';
-            value.textContent = Number.isFinite(info.value) ? String(Math.round(info.value)) : '––';
-            value.appendChild(el('span', 'rl3-sub-unit', 'spm'));
-            delta.textContent = Number.isFinite(info.delta) ? fmtSigned(Math.round(info.delta), 0) : '';
-        }
-        p.timer = setTimeout(() => {
-            p.el.classList.add('rl3-sub--out');
-            p.timer = setTimeout(() => {
-                p.el.remove();
-                if (r.pops[kind] === p) delete r.pops[kind];
-            }, 380);
+        r.shown[kind] = info;
+        renderMetrics(c, r.shown);
+        c.root.classList.add('rl3-card--flipped');
+        clearTimeout(c.timer);
+        c.timer = setTimeout(() => {
+            c.root.classList.remove('rl3-card--flipped');
+            // Keep the back's content until it has turned away, then forget it.
+            c.timer = setTimeout(() => {
+                r.shown = {};
+            }, FLIP_MS);
         }, hold);
     }
 
-    function clearPops() {
+    function metricNode(kind, info, compact) {
+        const node = el('div', `rl3-metric rl3-metric--${kind}${compact ? ' rl3-metric--compact' : ''}`);
+        const label = el('span', 'rl3-metric-label', kind === 'pace' ? 'Pace' : 'Rating');
+        const value = el('span', 'rl3-metric-value');
+        const delta = el('span', 'rl3-metric-delta');
+        if (kind === 'pace') {
+            value.textContent = fmtSplit(info.value);
+            value.appendChild(el('span', 'rl3-metric-unit', '/500'));
+            delta.textContent = Number.isFinite(info.delta) ? `${fmtSigned(info.delta, 1)}s` : '';
+        } else {
+            value.textContent = Number.isFinite(info.value) ? String(Math.round(info.value)) : '––';
+            value.appendChild(el('span', 'rl3-metric-unit', 'spm'));
+            delta.textContent = Number.isFinite(info.delta) ? fmtSigned(Math.round(info.delta), 0) : '';
+        }
+        node.append(label, delta, value);
+        return node;
+    }
+
+    function renderMetrics(c, shown) {
+        const kinds = ['pace', 'rate'].filter((k) => shown[k]);
+        const compact = kinds.length > 1;
+        c.metrics.replaceChildren(...kinds.map((k) => metricNode(k, shown[k], compact)));
+    }
+
+    function resetFlips() {
         for (const r of rt.values()) {
-            for (const p of Object.values(r.pops)) {
-                clearTimeout(p.timer);
-                p.el.remove();
-            }
-            r.pops = {};
+            clearTimeout(r.card.timer);
+            r.card.root.classList.remove('rl3-card--flipped');
+            r.shown = {};
         }
     }
 
-    /** Manual / test pop-up using the lane's latest sample (or a plausible value). */
+    /** Manual / test flip using the lane's latest sample (or a plausible value). */
     function fire(lane, kind) {
         const r = rt.get(Number(lane));
         if (!r) return;
         const last = [...r.hist].reverse().find((s) => Number.isFinite(kind === 'pace' ? s.split : s.rate));
         const rules = rulesFor(r.data.lane);
         if (kind === 'pace') {
-            pop(r, 'pace', { value: last ? last.split : 98.6, delta: -(rules.pace.drop + 0.4) }, rules);
+            flipCard(r, 'pace', { value: last ? last.split : 98.6, delta: -(rules.pace.drop + 0.4) }, rules);
         } else {
-            pop(r, 'rate', { value: last ? last.rate : 38, delta: rules.rate.rise + 1 }, rules);
+            flipCard(r, 'rate', { value: last ? last.rate : 38, delta: rules.rate.rise + 1 }, rules);
         }
     }
 
@@ -522,7 +548,7 @@
         state.shown = false;
         body.classList.remove('rl3--in');
         body.classList.add('rl3--out');
-        clearPops();
+        resetFlips();
         setTimeout(() => {
             if (!state.shown) body.classList.remove('rl3--on', 'rl3--out');
         }, 480);
@@ -654,9 +680,9 @@
         );
 
         const timing = el('fieldset');
-        timing.appendChild(el('legend', null, 'Sub-card'));
+        timing.appendChild(el('legend', null, 'Card flip'));
         timing.append(
-            ctrlField('Hold on screen (s)', 'rules.hold', 'number', { step: 0.5, min: 1 }),
+            ctrlField('Show data for (s)', 'rules.hold', 'number', { step: 0.5, min: 1 }),
             ctrlField('Cooldown per lane (s)', 'rules.cooldown', 'number', { step: 1, min: 0 }),
         );
 
@@ -675,8 +701,8 @@
             btn('In', show),
             btn('Out', hide),
             laneSel,
-            btn('Test pace', () => fire(laneSel.value, 'pace'), true),
-            btn('Test rate', () => fire(laneSel.value, 'rate'), true),
+            btn('Flip: pace', () => fire(laneSel.value, 'pace'), true),
+            btn('Flip: rating', () => fire(laneSel.value, 'rate'), true),
             btn('Demo', () => (state.demoTimer ? stopDemo() : startDemo()), true),
             btn('Guides', () => body.classList.toggle('rl3--guides'), true),
         );
@@ -685,7 +711,7 @@
             el(
                 'p',
                 'rl3-ctrl-hint',
-                'Hide this panel (C) before going to air. Keys: L in · O out · G guides · B backdrop · D demo · 1–9 test pace · Shift+1–9 test rate.',
+                'Hide this panel (C) before going to air. Keys: L in · O out · G guides · B backdrop · D demo · 1–9 flip pace · Shift+1–9 flip rating.',
             ),
         );
 
