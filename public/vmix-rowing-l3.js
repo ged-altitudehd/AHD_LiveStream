@@ -3,7 +3,7 @@
  *
  * Live fields (all marked data-field; shown as dashed/italic placeholders until
  * a live value arrives):
- *   race.title · race.number · race.type · race.gold · race.goldSplit · lane[n].code · lane[n].suit   (n = 1–9)
+ *   race.title · race.number · race.type · race.goldSplit · lane[n].code · lane[n].suit   (n = 1–9)
  *
  * Lane cards show the crew's row suit and the school/club code (e.g. AGSB), not the
  * full name. Suits come from assets/school-logos: 189 clubs have the detailed 1890px
@@ -20,8 +20,9 @@
  * Both hold for rules.hold seconds. Rules are global with optional per-lane
  * overrides (lanes[i].rules).
  *
- * Race positions: the crews placed 1st, 2nd and 3rd get an animated gold, silver or
- * bronze border on their card. Positions come from lanes[].position / telemetry[].position
+ * Race positions: the crews placed 1st, 2nd and 3rd get a gold, silver or bronze medal
+ * pop-up ("1st" with the medal) above the card's top-right corner, for as long as they
+ * hold that place. Positions come from lanes[].position / telemetry[].position
  * / positions (explicit), otherwise they are ranked from distance covered
  * (lanes[].distance / telemetry[].distance, metres). positions: null clears them.
  *
@@ -39,9 +40,9 @@
  *   {
  *     race:  { title, number, type, gold, goldSplit, distance },
  *            type: heat | rep | qf | sf | fa | fb | final | tt | free text
- *            gold = gold-standard time for the event ("5:18.68" or seconds); shown on the
- *            title bar next to the race type with its average split /500m, which is
- *            gold ÷ (distance / 500) unless goldSplit is given. distance defaults to 2000.
+ *            gold = gold-standard time for the event ("5:18.68" or seconds). Only its
+ *            average split /500m is shown, on the title bar next to the race type:
+ *            gold ÷ (distance / 500), or goldSplit if given. distance defaults to 2000.
  *            No gold → the block is hidden (it shows as a placeholder only while the
  *            whole race is still placeholders).
  *     rules: { pace: { enabled, drop, window }, rate: { enabled, rise, window }, hold, cooldown },
@@ -49,7 +50,7 @@
  *     lanes: [ { lane, name, code, suit, colors: ['#hex'], scratched, rules, split, rate } ],
  *     telemetry: [ { lane, split, rate, distance, position } ],
  *     positions: { "4": 1, "2": 2, "6": 3 } | [4, 2, 6] (lanes in race order) | null,
- *     medals: true | false,                   medal borders on/off (?medals=0)
+ *     medals: true | false,                   medal pop-ups on/off (?medals=0)
  *     show: true | false
  *   }
  *   code   = RowIT club code, shown on the card; also finds the row-suit PNG in data/ahd-lookup.json
@@ -79,7 +80,6 @@
         'race.title': 'Race title',
         'race.number': '00',
         'race.type': 'RACE TYPE',
-        'race.gold': '0:00.00',
         'race.goldSplit': '0:00.0',
         code: 'CODE',
     };
@@ -120,7 +120,7 @@
         race: { title: null, number: null, type: null },
         rules: clone(DEFAULT_RULES),
         lanes: [],
-        laneCount: q.get('lanes') ? clampLanes(numParam('lanes', MAX_LANES)) : null, // null = from the draw
+        laneCount: q.get('lanes') ? clampLanes(parseFloat(q.get('lanes'))) : null, // null = from the draw
         positions: new Map(), // lane → explicit race position
         distances: new Map(), // lane → metres covered (ranked when no explicit positions)
         medals: q.get('medals') !== '0',
@@ -145,8 +145,10 @@
         return Number.isFinite(v) ? v : fallback;
     }
 
+    /** 1–MAX_LANES, or null (= from the draw) for anything that isn't a number. */
     function clampLanes(n) {
-        return Math.max(1, Math.min(MAX_LANES, Math.round(n) || MAX_LANES));
+        const r = Math.round(Number(n));
+        return Number.isFinite(r) ? Math.max(1, Math.min(MAX_LANES, r)) : null;
     }
 
     function el(tag, className, text) {
@@ -188,9 +190,9 @@
 
     function fmtSplit(sec) {
         if (!Number.isFinite(sec)) return '–:––.–';
-        const m = Math.floor(sec / 60);
-        const s = sec - m * 60;
-        return `${m}:${s.toFixed(1).padStart(4, '0')}`;
+        const r = Math.round(sec * 10) / 10; // round first, so 1:59.97 → 2:00.0, not 1:60.0
+        const m = Math.floor(r / 60);
+        return `${m}:${(r - m * 60).toFixed(1).padStart(4, '0')}`;
     }
 
     function fmtSigned(v, digits) {
@@ -255,22 +257,12 @@
         renderGold();
     }
 
-    /** "5:18.68" | "318.68" | 318.68 → "5:18.68" (two decimals), or null. */
-    function fmtRaceTime(sec) {
-        if (!Number.isFinite(sec) || sec <= 0) return null;
-        const m = Math.floor(sec / 60);
-        const s = sec - m * 60;
-        return `${m}:${s.toFixed(2).padStart(5, '0')}`;
-    }
-
-    /** Gold standard: time + average split /500m, next to the race type. */
+    /** Gold standard: its average split /500m only, next to the race type. */
     function renderGold() {
         const race = state.race;
         const box = document.getElementById('rl3Gold');
-        const timeEl = box.querySelector('[data-field="race.gold"]');
         const splitEl = box.querySelector('[data-field="race.goldSplit"]');
         const sec = parseSplit(race.gold);
-        const time = blank(race.gold) ? null : fmtRaceTime(sec) || String(race.gold).trim();
         const dist = Number(race.distance) > 0 ? Number(race.distance) : 2000;
         let split = null;
         if (!blank(race.goldSplit)) {
@@ -282,12 +274,26 @@
         // Placeholder only while the whole race is placeholders; a live race without a
         // gold standard simply doesn't show the block.
         const placeholderRace = blank(race.title) && blank(race.number) && blank(race.type);
-        box.hidden = !time && !placeholderRace;
-        setField(timeEl, time, PH['race.gold']);
+        box.hidden = !split && !placeholderRace;
         setField(splitEl, split, PH['race.goldSplit']);
     }
 
     // ---------- lane cards ----------
+
+    /** Which crew a lane shows (code / name / suit), compared by value across feed updates. */
+    function crewId(d) {
+        if (d.empty) return 'empty';
+        return [d.code, d.name, d.suit].map((v) => (blank(v) ? '' : String(v).trim().toLowerCase())).join('|');
+    }
+
+    /** Long codes shrink to fit the card instead of being cut mid-letter. */
+    function fitCode(c) {
+        if (c.code.classList.contains('rl3-ph') || !c.code.textContent) {
+            c.code.style.fontSize = '';
+            return;
+        }
+        fitText(c.code, CODE_FONT);
+    }
 
     /** A lane in the draw with no crew in it (scratched, or nothing to show). */
     function isEmptyLane(l) {
@@ -560,14 +566,18 @@
         rate.append(rateValue, el('span', 'rl3-rate-unit', 'SPM'));
 
         flip.append(front, back);
-        // Medal ring (gold / silver / bronze by race position), drawn over the card edge.
+        // Medal pop-up (gold / silver / bronze by race position), above the top-right corner.
         const medal = el('div', 'rl3-medal');
         medal.setAttribute('aria-hidden', 'true');
+        const medalImg = el('img', 'rl3-medal-img');
+        medalImg.alt = '';
+        const medalText = el('span', 'rl3-medal-text');
+        medal.append(medalImg, medalText);
 
         root.append(flip, medal, rate);
         return {
             root, back, suit, laneEl, code, backLane, backCode, splitValue, splitDelta,
-            rate, rateValue, suitKey: null, timer: 0, rateTimer: 0,
+            rate, rateValue, medal, medalImg, medalText, suitKey: null, timer: 0, rateTimer: 0,
         };
     }
 
@@ -607,11 +617,23 @@
         list.forEach((data, i) => {
             let r = rt.get(data.lane);
             if (!r) {
-                r = { data, card: makeCard(data.lane), hist: [], base: { pace: -Infinity, rate: -Infinity }, cool: { pace: -Infinity, rate: -Infinity } };
+                r = { data, id: null, card: makeCard(data.lane), hist: [], base: { pace: -Infinity, rate: -Infinity }, cool: { pace: -Infinity, rate: -Infinity } };
                 rt.set(data.lane, r);
             }
+            // A different crew in this lane starts clean: no inherited history, cooldown or flip.
+            const id = crewId(data);
+            if (r.id !== null && r.id !== id) {
+                unflip(r);
+                r.hist = [];
+                r.base = { pace: -Infinity, rate: -Infinity };
+                r.cool = { pace: -Infinity, rate: -Infinity };
+            }
+            r.id = id;
             r.data = data;
             const c = r.card;
+            // Move a card only when it is out of place: re-inserting restarts its entrance
+            // animation and cuts a flip short, which a 1 s poll feed would do every second.
+            if (lanesEl.children[i] !== c.root) lanesEl.insertBefore(c.root, lanesEl.children[i] || null);
             c.root.style.setProperty('--rl3-i', i);
             c.laneEl.textContent = String(data.lane);
             c.backLane.textContent = String(data.lane);
@@ -621,6 +643,7 @@
                 unflip(r);
                 c.code.textContent = '';
                 c.code.classList.remove('rl3-ph');
+                c.code.style.fontSize = '';
                 c.backCode.textContent = '';
                 c.suit.replaceChildren();
                 c.suit.classList.remove('rl3-ph');
@@ -628,17 +651,19 @@
             } else {
                 const info = club(data.code);
                 setField(c.code, blank(data.code) ? null : String(data.code).trim().toUpperCase(), PH.code);
+                fitCode(c);
                 c.backCode.textContent = blank(data.code) ? '' : String(data.code).trim().toUpperCase();
                 paintSuit(c, data, info);
             }
-            lanesEl.appendChild(c.root); // keeps DOM order = list order
         });
         if (!state.lookup && list.some((l) => !l.empty && !blank(l.code))) loadLookup();
     }
 
-    // ---------- race positions → medal borders ----------
+    // ---------- race positions → medal pop-ups ----------
 
     const MEDALS = ['gold', 'silver', 'bronze'];
+    const PLACES = ['1st', '2nd', '3rd'];
+    const MEDAL_DIR = 'assets/rowing/';
 
     /** lane → position: explicit positions win; otherwise rank by distance covered. */
     function currentPositions() {
@@ -652,9 +677,19 @@
         for (const [lane, r] of rt) {
             const p = r.data.empty ? 0 : pos.get(lane) || 0;
             const medal = MEDALS[p - 1] || '';
-            if ((r.card.root.dataset.medal || '') !== medal) {
-                if (medal) r.card.root.dataset.medal = medal;
-                else delete r.card.root.dataset.medal;
+            const c = r.card;
+            if ((c.medal.dataset.medal || '') === medal) continue;
+            if (medal) {
+                c.medal.dataset.medal = medal;
+                c.medalImg.src = `${MEDAL_DIR}medal-${medal}.svg`;
+                c.medalText.textContent = PLACES[p - 1];
+                // Replay the pop when a crew gains or changes medal.
+                c.medal.classList.remove('rl3-medal--on');
+                void c.medal.offsetWidth;
+                c.medal.classList.add('rl3-medal--on');
+            } else {
+                delete c.medal.dataset.medal;
+                c.medal.classList.remove('rl3-medal--on');
             }
         }
     }
@@ -687,7 +722,10 @@
         const r = rt.get(Number(lane));
         if (!r) return;
         const ts = Number.isFinite(t) ? t : now();
-        const sample = { t: ts, split: parseSplit(split), rate: Number(rate) };
+        const sp = parseSplit(split);
+        const rt_ = blank(rate) ? NaN : Number(rate);
+        // Blank or zero readings (e.g. before the start) are missing data, not 0.
+        const sample = { t: ts, split: sp > 0 ? sp : NaN, rate: rt_ > 0 ? rt_ : NaN };
         r.hist.push(sample);
         const rules = rulesFor(r.data.lane);
         const keep = Math.max(rules.pace.window, rules.rate.window) + 2;
@@ -696,6 +734,9 @@
     }
 
     function evaluate(r, cur, rules) {
+        // While hidden, or for a lane with no crew, keep the history but don't fire (so the
+        // cooldown isn't used up by a flip nobody sees).
+        if (!state.shown || r.data.empty) return;
         const t = cur.t;
         if (rules.pace.enabled && Number.isFinite(cur.split)) {
             const from = Math.max(t - rules.pace.window, r.base.pace);
@@ -723,6 +764,7 @@
 
     const FLIP_MS = 600; // matches .rl3-card-flip transition
     const SPLIT_FONT = { max: 60, min: 30 }; // px: as large as the card width allows
+    const CODE_FONT = { max: 25, min: 15 };
 
     /** Pace: flip the card to show the split in place of the suit; holds, then flips back. */
     function flipCard(r, info, rules) {
@@ -815,7 +857,7 @@
         if (input.rules) deepMerge(state.rules, input.rules);
         if ('laneCount' in input) {
             const n = Number(input.laneCount);
-            state.laneCount = input.laneCount == null || input.laneCount === '' || !Number.isFinite(n) ? null : clampLanes(n);
+            state.laneCount = input.laneCount == null || input.laneCount === '' ? null : clampLanes(n);
         }
         if (Array.isArray(input.lanes)) {
             state.lanes = input.lanes
@@ -834,8 +876,9 @@
         renderMedals();
         syncCtrl();
         if (Array.isArray(input.lanes)) {
-            for (const l of input.lanes) {
-                if (l && (l.split != null || l.rate != null)) telemetry(l.lane, l.split, l.rate);
+            const byLane = new Map(state.lanes.map((l) => [l.lane, l])); // last row per lane, as shown
+            for (const l of byLane.values()) {
+                if (l.split != null || l.rate != null) telemetry(l.lane, l.split, l.rate);
             }
         }
         if (Array.isArray(input.telemetry)) {
@@ -930,7 +973,7 @@
             ctrlField('Gold standard (m:ss.00)', 'race.gold', 'text'),
             ctrlField('Distance (m)', 'race.distance', 'number', { min: 100, step: 50 }),
             ctrlField('Lanes in race (blank = from draw)', 'laneCount', 'number', { min: 1, max: 9, step: 1 }),
-            ctrlField('Medal borders (1st–3rd)', 'medals', 'checkbox'),
+            ctrlField('Medal pop-ups (1st–3rd)', 'medals', 'checkbox'),
         );
 
         const pace = el('fieldset');
@@ -1055,7 +1098,7 @@
         hide,
         demo: (on) => (on === false ? stopDemo() : startDemo()),
         get state() {
-            return clone({ race: state.race, rules: state.rules, lanes: state.lanes });
+            return clone({ race: state.race, rules: state.rules, laneCount: state.laneCount, lanes: state.lanes });
         },
     };
 
@@ -1086,5 +1129,9 @@
     if (q.get('demo') === '1') startDemo();
     if (q.get('data')) startPoll(q.get('data'), Math.max(200, numParam('poll', 1000)));
     if (q.get('auto') !== '0') requestAnimationFrame(show);
+    // Code widths depend on the web font: refit once it has loaded.
+    document.fonts?.ready.then(() => {
+        for (const r of rt.values()) if (!r.data.empty) fitCode(r.card);
+    });
 
 })();
