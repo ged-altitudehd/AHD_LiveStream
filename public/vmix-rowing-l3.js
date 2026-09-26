@@ -3,7 +3,10 @@
  *
  * Live fields (all marked data-field; shown as dashed/italic placeholders until
  * a live value arrives):
- *   race.title · race.number · race.type · lane[n].name · lane[n].suit   (n = 1–9)
+ *   race.title · race.number · race.type · lane[n].code · lane[n].suit   (n = 1–9)
+ *
+ * Lane cards show the school/club code (e.g. AGSB), not the full name, per the
+ * AltitudeHD brand: codes are set in JetBrains Mono, uppercase and tracked.
  *
  * Programmable lane cards — a sub-card pops above a lane when, within a rolling
  * window, that crew's
@@ -29,7 +32,8 @@
  *     telemetry: [ { lane, split, rate } ],
  *     show: true | false
  *   }
- *   code  = RowIT club code → name + row-suit PNG from data/ahd-lookup.json
+ *   code  = RowIT club code, shown on the card; also finds the row-suit PNG in data/ahd-lookup.json
+ *   name  = full school/club name (optional; used as the suit image's alt text, not shown)
  *   suit  = explicit row-suit image URL (wins over code)
  *   split = seconds per 500 m (102.4) or "1:42.4"; rate = strokes per minute
  *
@@ -38,15 +42,14 @@
  */
 (function () {
     const MAX_LANES = 9;
-    const NAME_FONT = { max: 17, min: 12 };
     const LOOKUP_URL = 'data/ahd-lookup.json';
     const SUIT_DIR = 'assets/school-logos/';
 
     const PH = {
-        'race.title': 'RACE TITLE',
+        'race.title': 'Race title',
         'race.number': '00',
         'race.type': 'RACE TYPE',
-        name: 'SCHOOL / CLUB NAME',
+        code: 'CODE',
     };
 
     const RACE_TYPES = {
@@ -235,27 +238,16 @@
         );
     }
 
-    /** Shrink long school names to fit two lines instead of truncating. */
-    function fitName(node) {
-        if (!node.isConnected) return requestAnimationFrame(() => node.isConnected && fitName(node));
-        let size = NAME_FONT.max;
-        node.style.fontSize = `${size}px`;
-        while (size > NAME_FONT.min && node.scrollHeight > node.clientHeight + 1) {
-            size -= 1;
-            node.style.fontSize = `${size}px`;
-        }
-    }
-
     function makeCard(lane) {
         const root = el('div', 'rl3-card');
         const subs = el('div', 'rl3-subs');
         const suit = el('div', 'rl3-card-suit');
         suit.dataset.field = `lane${lane}.suit`;
         const laneEl = el('div', 'rl3-card-lane', String(lane));
-        const name = el('div', 'rl3-card-name');
-        name.dataset.field = `lane${lane}.name`;
-        root.append(subs, suit, laneEl, name);
-        return { root, subs, suit, laneEl, name, suitKey: null };
+        const code = el('div', 'rl3-card-code');
+        code.dataset.field = `lane${lane}.code`;
+        root.append(subs, suit, laneEl, code);
+        return { root, subs, suit, laneEl, code, suitKey: null };
     }
 
     function paintSuit(card, data, info) {
@@ -276,7 +268,7 @@
         if (!url) return placeholder();
         card.suit.classList.remove('rl3-ph');
         const img = el('img', 'rl3-suit-img');
-        img.alt = '';
+        img.alt = data.name || info?.name || '';
         img.onerror = placeholder;
         img.src = url;
         card.suit.appendChild(img);
@@ -301,12 +293,8 @@
             const c = r.card;
             c.root.style.setProperty('--rl3-i', i);
             const info = club(data.code);
-            const accent = data.colors?.[0];
-            if (accent) c.root.style.setProperty('--rl3-crew', accent);
-            else c.root.style.removeProperty('--rl3-crew');
             c.laneEl.textContent = String(data.lane);
-            setField(c.name, !blank(data.name) ? data.name : info?.name, PH.name);
-            fitName(c.name);
+            setField(c.code, blank(data.code) ? null : String(data.code).trim().toUpperCase(), PH.code);
             paintSuit(c, data, info);
             lanesEl.appendChild(c.root); // keeps DOM order = list order
         });
@@ -685,7 +673,5 @@
     if (q.get('demo') === '1') startDemo();
     if (q.get('data')) startPoll(q.get('data'), Math.max(200, numParam('poll', 1000)));
     if (q.get('auto') !== '0') requestAnimationFrame(show);
-    document.fonts?.ready.then(() => {
-        for (const r of rt.values()) fitName(r.card.name);
-    });
+
 })();
