@@ -10,8 +10,8 @@
    - No logo or holding device here: Milford runs as a separate always-on bug, and the
      guide says the holding device is not used when the logo appears elsewhere.
    - Crews are shown by their row suit (white background cut out in the browser) and club code.
-   - Panels sit at ~30% opacity so the race shows through; text carries a soft shadow
-     to stay legible over bright water. */
+   - Lane cards and pop-ups sit at ~45% opacity so the race shows through; the race
+     number / title rail is solid Milford grey. Text carries a soft shadow over bright water. */
 
 @font-face {
     font-family: 'Montserrat';
@@ -32,7 +32,8 @@
     --mf-white: #ffffff;
 
     /* Derived from Milford grey for broadcast surfaces */
-    --mf-surface: rgba(48, 60, 66, 0.3);
+    --mf-surface: #303c42;                  /* race rail: solid Milford grey */
+    --mf-card: rgba(48, 60, 66, 0.45);      /* lane cards + pop-ups: 45% so the race shows through */
     --mf-surface-deep: #232c31;
     --mf-hairline: rgba(247, 247, 247, 0.16);
     --mf-muted: rgba(247, 247, 247, 0.62);
@@ -195,7 +196,7 @@ body.rl3-page.rl3--preview-bg {
     flex-direction: column;
     gap: 8px;
     padding: 10px;
-    background: var(--mf-surface);
+    background: var(--mf-card);
     border-radius: var(--radius-card);
     box-shadow: var(--mf-shadow);
 }
@@ -279,7 +280,7 @@ body.rl3-page.rl3--preview-bg {
     column-gap: 8px;
     row-gap: 4px;
     padding: 8px 10px 10px;
-    background: var(--mf-surface);
+    background: var(--mf-card);
     border-radius: var(--radius-card);
     box-shadow: var(--mf-shadow);
     transform-origin: bottom center;
@@ -295,7 +296,7 @@ body.rl3-page.rl3--preview-bg {
     margin-left: -7px;
     border: 7px solid transparent;
     border-bottom: 0;
-    border-top-color: var(--mf-surface);
+    border-top-color: var(--mf-card);
 }
 
 .rl3-sub + .rl3-sub::after { display: none; }
