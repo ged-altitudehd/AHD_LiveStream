@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1920, height=1080, initial-scale=1">
+    <title>vMix — Rowing lane lower third</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700&family=JetBrains+Mono:wght@500;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+    <link rel="stylesheet" href="vmix-rowing-l3.css?v=1">
+</head>
+<body class="rl3-page">
+    <!-- 1920×1080, transparent. Everything live is marked data-field; see vmix-rowing-l3.js header. -->
+    <div class="rl3-stage" id="rl3Stage">
+        <div class="rl3-safe" aria-hidden="true"></div>
+        <section class="rl3" id="rl3" aria-label="Race lower third">
+            <div class="rl3-lanes" id="rl3Lanes"></div>
+            <div class="rl3-rail">
+                <div class="rl3-rail-num">
+                    <span class="rl3-rail-num-label">Race</span>
+                    <span class="rl3-rail-num-val" data-field="race.number"></span>
+                </div>
+                <div class="rl3-rail-title" data-field="race.title"></div>
+                <div class="rl3-rail-type" data-field="race.type"></div>
+            </div>
+        </section>
+        <aside class="rl3-ctrl" id="rl3Ctrl" hidden></aside>
+    </div>
+    <script src="vmix-rowing-l3.js?v=1"></script>
+</body>
+</html>
