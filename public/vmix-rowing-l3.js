@@ -9,12 +9,13 @@
  * school/club code (e.g. AGSB), not the full name.
  * Styled to the Milford Asset Management brand guidelines (see vmix-rowing-l3.css).
  *
- * Programmable lane cards — a lane's card flips over to show the data in place of
- * the suit when, within a rolling window, that crew's
- *   pace:  split (sec/500 m) drops by more than rules.pace.drop seconds, or
- *   rate:  stroke rating rises by more than rules.rate.rise spm.
- * Rules are global with optional per-lane overrides (lanes[i].rules). The card holds
- * the data for rules.hold seconds, then flips back; if both fire, the back shows both.
+ * Programmable lane cards — within a rolling window, when that crew's
+ *   pace:  split (sec/500 m) drops by more than rules.pace.drop seconds, the card
+ *          flips over to show the split in place of the suit;
+ *   rate:  stroke rating rises by more than rules.rate.rise spm, a small "38 SPM"
+ *          pop-up appears above the card's top-left corner (the card does not flip).
+ * Both hold for rules.hold seconds. Rules are global with optional per-lane
+ * overrides (lanes[i].rules).
  *
  * Feeding data (any mix):
  *   URL      ?title=&num=&type=&lanes=8&paceDrop=2&rateRise=3&window=10&hold=5&cooldown=12
@@ -51,7 +52,7 @@
  *   split = seconds per 500 m (102.4) or "1:42.4"; rate = strokes per minute
  *
  * Keys: L in · O out · G guides · C control panel · B preview backdrop · D demo
- *       1–9 test pace flip on lane · Shift+1–9 test rating flip.
+ *       1–9 test pace flip on lane · Shift+1–9 test rating pop-up.
  */
 (function () {
     const MAX_LANES = 9;
@@ -389,14 +390,27 @@
         const head = el('div', 'rl3-back-head');
         const backLane = el('div', 'rl3-card-lane rl3-card-lane--sm', String(lane));
         const backCode = el('div', 'rl3-back-code');
-        const headLabel = el('div', 'rl3-back-label');
-        head.append(backLane, backCode, headLabel);
-        const metrics = el('div', 'rl3-metrics');
-        back.append(head, metrics);
+        head.append(backLane, backCode, el('span', 'rl3-metric-label', 'Pace'));
+        const split = el('div', 'rl3-metric');
+        const splitValue = el('span', 'rl3-metric-value');
+        const foot = el('div', 'rl3-metric-foot');
+        const splitDelta = el('span', 'rl3-metric-delta');
+        foot.append(el('span', 'rl3-metric-unit', '/500m'), splitDelta);
+        split.append(splitValue, foot);
+        back.append(head, split);
+
+        // Rating pop-up: outside the flipping element, so it shows whichever face is up.
+        const rate = el('div', 'rl3-rate');
+        rate.setAttribute('aria-hidden', 'true');
+        const rateValue = el('span', 'rl3-rate-value');
+        rate.append(rateValue, el('span', 'rl3-rate-unit', 'SPM'));
 
         flip.append(front, back);
-        root.append(flip);
-        return { root, back, suit, laneEl, code, backLane, backCode, headLabel, metrics, suitKey: null, timer: 0 };
+        root.append(flip, rate);
+        return {
+            root, back, suit, laneEl, code, backLane, backCode, splitValue, splitDelta,
+            rate, rateValue, suitKey: null, timer: 0, rateTimer: 0,
+        };
     }
 
     function paintSuit(card, data, info) {
@@ -435,7 +449,7 @@
         list.forEach((data, i) => {
             let r = rt.get(data.lane);
             if (!r) {
-                r = { data, card: makeCard(data.lane), hist: [], base: { pace: -Infinity, rate: -Infinity }, cool: { pace: -Infinity, rate: -Infinity }, shown: {} };
+                r = { data, card: makeCard(data.lane), hist: [], base: { pace: -Infinity, rate: -Infinity }, cool: { pace: -Infinity, rate: -Infinity } };
                 rt.set(data.lane, r);
             }
             r.data = data;
@@ -488,7 +502,7 @@
             if (drop > rules.pace.drop && t >= r.cool.pace) {
                 r.cool.pace = t + rules.cooldown;
                 r.base.pace = t;
-                flipCard(r, 'pace', { value: cur.split, delta: -drop }, rules);
+                flipCard(r, { value: cur.split, delta: -drop }, rules);
             }
         }
         if (rules.rate.enabled && Number.isFinite(cur.rate)) {
@@ -499,77 +513,42 @@
             if (rise > rules.rate.rise && t >= r.cool.rate) {
                 r.cool.rate = t + rules.cooldown;
                 r.base.rate = t;
-                flipCard(r, 'rate', { value: cur.rate, delta: rise }, rules);
+                popRating(r, { value: cur.rate, delta: rise }, rules);
             }
         }
     }
 
     const FLIP_MS = 600; // matches .rl3-card-flip transition
+    const SPLIT_FONT = { max: 60, min: 30 }; // px: as large as the card width allows
 
-    /** Flip a lane's card to show the triggered data; holds, then flips back. */
-    function flipCard(r, kind, info, rules) {
+    /** Pace: flip the card to show the split in place of the suit; holds, then flips back. */
+    function flipCard(r, info, rules) {
         if (!state.shown || r.data.empty) return;
         const c = r.card;
         const hold = (rules || rulesFor(r.data.lane)).hold * 1000;
-        r.shown[kind] = info;
-        renderMetrics(c, r.shown);
+        renderSplit(c, info);
         c.root.classList.add('rl3-card--flipped');
         clearTimeout(c.timer);
-        c.timer = setTimeout(() => {
-            c.root.classList.remove('rl3-card--flipped');
-            // Keep the back's content until it has turned away, then forget it.
-            c.timer = setTimeout(() => {
-                r.shown = {};
-            }, FLIP_MS);
-        }, hold);
+        c.timer = setTimeout(() => c.root.classList.remove('rl3-card--flipped'), hold);
+    }
+
+    /** Rating: small "38 SPM" pop-up above the card's top-left corner; the card doesn't flip. */
+    function popRating(r, info, rules) {
+        if (!state.shown || r.data.empty) return;
+        const c = r.card;
+        const hold = (rules || rulesFor(r.data.lane)).hold * 1000;
+        c.rateValue.textContent = Number.isFinite(info.value) ? String(Math.round(info.value)) : '––';
+        c.rate.classList.add('rl3-rate--on');
+        clearTimeout(c.rateTimer);
+        c.rateTimer = setTimeout(() => c.rate.classList.remove('rl3-rate--on'), hold);
     }
 
     function unflip(r) {
-        clearTimeout(r.card.timer);
-        r.card.root.classList.remove('rl3-card--flipped');
-        r.shown = {};
-    }
-
-    const METRIC = {
-        pace: {
-            label: 'Pace',
-            value: (info) => fmtSplit(info.value),
-            unit: '/500m',
-            delta: (info) => (Number.isFinite(info.delta) ? `${fmtSigned(info.delta, 1)}s` : ''),
-        },
-        rate: {
-            label: 'Rating',
-            value: (info) => (Number.isFinite(info.value) ? String(Math.round(info.value)) : '––'),
-            unit: 'spm',
-            delta: (info) => (Number.isFinite(info.delta) ? fmtSigned(Math.round(info.delta), 0) : ''),
-        },
-    };
-
-    // Value sizes (px): as large as the card width allows, down to the minimum.
-    const VALUE_FONT = { single: { max: 60, min: 30 }, compact: { max: 34, min: 20 } };
-
-    function labelNode(kind) {
-        return el('span', `rl3-metric-label rl3-metric-label--${kind}`, METRIC[kind].label);
-    }
-
-    /** Single metric: big value, unit + change underneath (label sits in the card header). */
-    function metricNode(kind, info) {
-        const m = METRIC[kind];
-        const node = el('div', `rl3-metric rl3-metric--${kind}`);
-        const foot = el('div', 'rl3-metric-foot');
-        foot.append(el('span', 'rl3-metric-unit', m.unit), el('span', 'rl3-metric-delta', m.delta(info)));
-        node.append(el('span', 'rl3-metric-value', m.value(info)), foot);
-        return node;
-    }
-
-    /** Both metrics: two rows, each label · change / value + unit. */
-    function compactNode(kind, info) {
-        const m = METRIC[kind];
-        const node = el('div', `rl3-metric rl3-metric--${kind} rl3-metric--compact`);
-        const value = el('span', 'rl3-metric-value', m.value(info));
-        value.appendChild(el('span', 'rl3-metric-unit', m.unit));
-        node.append(labelNode(kind), el('span', 'rl3-metric-delta', m.delta(info)), value);
-        return node;
+        const c = r.card;
+        clearTimeout(c.timer);
+        clearTimeout(c.rateTimer);
+        c.root.classList.remove('rl3-card--flipped');
+        c.rate.classList.remove('rl3-rate--on');
     }
 
     function fitText(node, { max, min }) {
@@ -581,29 +560,27 @@
         }
     }
 
-    function renderMetrics(c, shown) {
-        const kinds = ['pace', 'rate'].filter((k) => shown[k]);
-        const compact = kinds.length > 1;
-        c.headLabel.replaceChildren(...(compact ? [] : kinds.map(labelNode)));
-        c.metrics.replaceChildren(...kinds.map((k) => (compact ? compactNode : metricNode)(k, shown[k])));
-        const font = compact ? VALUE_FONT.compact : VALUE_FONT.single;
-        for (const v of c.metrics.querySelectorAll('.rl3-metric-value')) fitText(v, font);
+    /** Card back: header (lane · code · Pace), big split, then /500m and the change. */
+    function renderSplit(c, info) {
+        c.splitValue.textContent = fmtSplit(info.value);
+        c.splitDelta.textContent = Number.isFinite(info.delta) ? `${fmtSigned(info.delta, 1)}s` : '';
+        fitText(c.splitValue, SPLIT_FONT);
     }
 
     function resetFlips() {
         for (const r of rt.values()) unflip(r);
     }
 
-    /** Manual / test flip using the lane's latest sample (or a plausible value). */
+    /** Manual / test trigger using the lane's latest sample (or a plausible value). */
     function fire(lane, kind) {
         const r = rt.get(Number(lane));
         if (!r || r.data.empty) return;
         const last = [...r.hist].reverse().find((s) => Number.isFinite(kind === 'pace' ? s.split : s.rate));
         const rules = rulesFor(r.data.lane);
         if (kind === 'pace') {
-            flipCard(r, 'pace', { value: last ? last.split : 98.6, delta: -(rules.pace.drop + 0.4) }, rules);
+            flipCard(r, { value: last ? last.split : 98.6, delta: -(rules.pace.drop + 0.4) }, rules);
         } else {
-            flipCard(r, 'rate', { value: last ? last.rate : 38, delta: rules.rate.rise + 1 }, rules);
+            popRating(r, { value: last ? last.rate : 38, delta: rules.rate.rise + 1 }, rules);
         }
     }
 
@@ -755,7 +732,7 @@
         );
 
         const timing = el('fieldset');
-        timing.appendChild(el('legend', null, 'Card flip'));
+        timing.appendChild(el('legend', null, 'Pace flip / rating pop-up'));
         timing.append(
             ctrlField('Show data for (s)', 'rules.hold', 'number', { step: 0.5, min: 1 }),
             ctrlField('Cooldown per lane (s)', 'rules.cooldown', 'number', { step: 1, min: 0 }),
@@ -777,7 +754,7 @@
             btn('Out', hide),
             laneSel,
             btn('Flip: pace', () => fire(laneSel.value, 'pace'), true),
-            btn('Flip: rating', () => fire(laneSel.value, 'rate'), true),
+            btn('Rating pop-up', () => fire(laneSel.value, 'rate'), true),
             btn('Demo', () => (state.demoTimer ? stopDemo() : startDemo()), true),
             btn('Guides', () => body.classList.toggle('rl3--guides'), true),
         );
@@ -786,7 +763,7 @@
             el(
                 'p',
                 'rl3-ctrl-hint',
-                'Hide this panel (C) before going to air. Keys: L in · O out · G guides · B backdrop · D demo · 1–9 flip pace · Shift+1–9 flip rating.',
+                'Hide this panel (C) before going to air. Keys: L in · O out · G guides · B backdrop · D demo · 1–9 flip pace · Shift+1–9 rating pop-up.',
             ),
         );
 

@@ -10,8 +10,9 @@
    - No logo or holding device here: Milford runs as a separate always-on bug, and the
      guide says the holding device is not used when the logo appears elsewhere.
    - Crews are shown by their row suit (white background cut out in the browser) and club code.
-   - Lane cards are 80% Milford grey and flip over to a near-solid (95%) data side for pace /
-     rating; the race number / title rail is solid Milford grey.
+   - Lane cards are 80% Milford grey and flip over to a near-solid (95%) side showing the split;
+     a rating rise shows as a small "38 SPM" chip above the card's top-left corner (30% orange
+     tint). The race number / title rail is solid Milford grey.
    - One fixed-width card per lane, so the graphic is as wide as the race has lanes
      (left-anchored at title safe); the rail matches that width. Text carries a soft shadow over bright water. */
 
@@ -326,27 +327,13 @@ body.rl3-page {
     text-overflow: ellipsis;
 }
 
-.rl3-back-label { flex: 0 0 auto; display: flex; }
-
-.rl3-metrics {
-    flex: 1 1 auto;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 8px;
-}
-
-/* Pace = Milford orange; rating = 30% orange tint — both primary palette. */
-.rl3-metric-label--pace { --rl3-accent: var(--mf-orange); --rl3-on-accent: var(--mf-white); }
-.rl3-metric-label--rate { --rl3-accent: var(--mf-orange-30); --rl3-on-accent: var(--mf-grey); }
-
-/* Label sits in a small lozenge. */
+/* "Pace" sits in a small Milford-orange lozenge. */
 .rl3-metric-label {
+    flex: 0 0 auto;
     padding: 3px 9px 4px;
     border-radius: 6px;
-    background: var(--rl3-accent);
-    color: var(--rl3-on-accent);
+    background: var(--mf-orange);
+    color: var(--mf-white);
     font-size: 14px;
     font-weight: 700;
     line-height: 1.1;
@@ -354,10 +341,13 @@ body.rl3-page {
     white-space: nowrap;
 }
 
-/* Single metric: the value is as large as the card width allows (fitted in JS). */
+/* The split is as large as the card width allows (fitted in JS). */
 .rl3-metric {
+    flex: 1 1 auto;
+    min-height: 0;
     display: flex;
     flex-direction: column;
+    justify-content: center;
     gap: 6px;
     min-width: 0;
 }
@@ -395,19 +385,46 @@ body.rl3-page {
     color: var(--mf-white);
 }
 
-/* Both triggers at once: two rows — label · change, then value + unit. */
-.rl3-metric--compact {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    align-items: center;
-    column-gap: 8px;
-    row-gap: 3px;
+/* ---------- Rating pop-up: small chip above the card's top-left corner ---------- */
+
+.rl3-rate {
+    position: absolute;
+    left: 0;
+    bottom: calc(100% + 6px);
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    padding: 5px 10px 6px;
+    border-radius: var(--radius-lozenge);
+    background: var(--mf-orange-30);
+    color: var(--mf-grey);
+    text-shadow: none;
+    box-shadow: var(--mf-shadow);
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(10px) scale(0.9);
+    transform-origin: bottom left;
+    transition: opacity 200ms var(--ease-standard), transform 300ms var(--ease-out);
 }
 
-.rl3-metric--compact .rl3-metric-label { justify-self: start; font-size: 12px; padding: 2px 7px 3px; }
-.rl3-metric--compact .rl3-metric-delta { justify-self: end; font-size: 16px; }
-.rl3-metric--compact .rl3-metric-value { grid-column: 1 / -1; font-size: 34px; line-height: 1; }
-.rl3-metric--compact .rl3-metric-unit { font-size: 13px; margin-left: 4px; }
+.rl3-rate--on {
+    opacity: 1;
+    transform: none;
+}
+
+.rl3-rate-value {
+    font-size: 26px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: var(--track-headline);
+}
+
+.rl3-rate-unit {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+}
 
 /* ---------- In / out ---------- */
 
@@ -424,7 +441,8 @@ body.rl3-page {
     .rl3--in .rl3-rail,
     .rl3--in .rl3-rail > *,
     .rl3--in .rl3-card { animation-duration: 1ms; animation-delay: 0ms; }
-    .rl3-card-flip { transition-duration: 1ms; }
+    .rl3-card-flip,
+    .rl3-rate { transition-duration: 1ms; }
 }
 
 /* ---------- Placeholder marking ----------
