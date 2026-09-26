@@ -69,11 +69,10 @@ body.rl3-page {
     -webkit-font-smoothing: antialiased;
 }
 
-/* Preview backdrop for design work only (?bg=1) — never on air. */
-body.rl3-page.rl3--preview-bg {
-    background:
-        linear-gradient(180deg, rgba(0, 0, 0, 0) 55%, rgba(0, 0, 0, 0.35) 100%),
-        linear-gradient(160deg, #7d97ab 0%, #45627a 45%, #243b4d 100%);
+/* Preview backdrop for design work only (?bg=1 / B) — never on air: a Karāpiro finish
+   frame on the 1920×1080 stage, so legibility can be judged over real footage. */
+.rl3--preview-bg .rl3-stage {
+    background: #243b4d url('assets/vmix/preview/karapiro-finish.webp') center / cover no-repeat;
 }
 
 .rl3-stage {
