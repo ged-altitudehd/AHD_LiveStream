@@ -7,8 +7,9 @@
    - Type: Gotham → Montserrat for digital. Medium for headlines, tracking −25, snug leading.
      Bold for product-style labels. No full stops on headings; sentence case.
    - Lozenge: rounded rectangle used to highlight a key word or call to action (race type here).
-   - Holding device: transparent grey Mitre Peak with an orange ridge line, housing the logo,
-     always bottom right. The logo artwork is used as supplied (never re-created). */
+   - No logo or holding device here: Milford runs as a separate always-on bug, and the
+     guide says the holding device is not used when the logo appears elsewhere.
+   - Crews are shown by club code plus a bar of their row-suit colours. */
 
 @font-face {
     font-family: 'Montserrat';
@@ -45,9 +46,8 @@
     --ease-standard: cubic-bezier(0.2, 0, 0.2, 1);
 
     --rl3-gap: 8px;
-    --rl3-card-h: 142px;
+    --rl3-card-h: 96px;
     --rl3-rail-h: 60px;
-    --rl3-hold-w: 250px;
 }
 
 * { box-sizing: border-box; }
@@ -89,7 +89,7 @@ body.rl3-page.rl3--preview-bg {
 
 .rl3--guides .rl3-safe { display: block; }
 
-/* ---------- Layout: [lanes over rail] + holding device bottom right ---------- */
+/* ---------- Layout: lanes over the race rail ---------- */
 
 .rl3 {
     position: absolute;
@@ -97,8 +97,6 @@ body.rl3-page.rl3--preview-bg {
     right: 96px;
     bottom: 54px;
     display: flex;
-    align-items: flex-end;
-    gap: var(--rl3-gap);
     visibility: hidden;
 }
 
@@ -184,50 +182,6 @@ body.rl3-page.rl3--preview-bg {
 
 .rl3-rail-type[data-tier='semi'] { background: var(--mf-orange-80); }
 
-/* ---------- Holding device (Milford): transparent grey peak + orange ridge + logo ---------- */
-
-.rl3-hold {
-    position: relative;
-    flex: 0 0 var(--rl3-hold-w);
-    height: calc(var(--rl3-card-h) + var(--rl3-gap) + var(--rl3-rail-h));
-}
-
-.rl3-hold svg {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    overflow: visible;
-}
-
-.rl3-hold-fill { fill: var(--mf-surface); }
-
-.rl3-hold-ridge {
-    fill: none;
-    stroke: var(--mf-orange);
-    stroke-width: 3;
-    stroke-linejoin: round;
-    stroke-linecap: round;
-}
-
-/* lower-logo-art.png carries an unrelated orange wedge at x 208–237;
-   crop to the logo itself (x 2–112 of 240) and centre it under the peak. */
-.rl3-hold-logo {
-    position: absolute;
-    right: 38px;
-    bottom: 14px;
-    width: 120px;
-    height: 112px;
-    overflow: hidden;
-}
-
-.rl3-hold-logo img {
-    display: block;
-    width: 255px;
-    height: auto;
-    margin-left: -2px;
-}
-
 /* ---------- Lane cards ---------- */
 
 .rl3-card {
@@ -236,71 +190,65 @@ body.rl3-page.rl3--preview-bg {
     min-width: 0;
     display: flex;
     flex-direction: column;
+    gap: 8px;
+    padding: 10px;
     background: var(--mf-surface);
     border-radius: var(--radius-card);
     box-shadow: var(--mf-shadow);
 }
 
-.rl3-card-suit {
+/* Row-suit colours as a horizontal rectangle; main colour widest. The inset hairline
+   keeps dark colours (navy, black) readable against Milford grey. */
+.rl3-card-colours {
     position: relative;
-    flex: 0 0 96px;
+    flex: 0 0 34px;
     display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    background: var(--mf-white);
-    border-radius: var(--radius-card) var(--radius-card) 0 0;
     overflow: hidden;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.06);
 }
 
-/* RowIT suit PNGs are square with the club code under the suit;
-   oversize and top-align so only the suit shows (the code is typeset below). */
-.rl3-suit-img {
-    height: 114px;
-    width: 114px;
-    object-fit: contain;
-    margin-top: 1px;
-}
-
-/* Soft white fade over the bottom edge hides any caption that peeks in. */
-.rl3-card-suit:not(.rl3-ph)::after {
+.rl3-card-colours::after {
     content: '';
     position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: 10px;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, var(--mf-white) 90%);
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+    pointer-events: none;
 }
 
-.rl3-suit-svg {
-    height: 88px;
-    margin-top: 5px;
+.rl3-colour {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.rl3-card-row {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 0;
 }
 
 .rl3-card-lane {
-    position: absolute;
-    left: 6px;
-    top: 6px;
+    flex: 0 0 auto;
     min-width: 32px;
     height: 32px;
     padding: 0 7px;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--mf-grey);
+    background: rgba(247, 247, 247, 0.12);
     color: var(--mf-white);
     font-size: 19px;
     font-weight: 700;
     border-radius: var(--radius-lozenge);
-    z-index: 1;
 }
 
 .rl3-card-code {
     flex: 1 1 auto;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0 8px;
+    min-width: 0;
+    text-align: center;
     font-size: 25px;
     font-weight: 700;
     letter-spacing: 0.04em;
@@ -308,6 +256,7 @@ body.rl3-page.rl3--preview-bg {
     white-space: nowrap;
     overflow: hidden;
 }
+
 
 /* ---------- Pop-up sub-cards (pace / rating) ---------- */
 
@@ -409,20 +358,16 @@ body.rl3-page.rl3--preview-bg {
 
 @keyframes rl3-wipe { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 @keyframes rl3-up { from { opacity: 0; transform: translateY(32px); } to { opacity: 1; transform: none; } }
-@keyframes rl3-rise { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: none; } }
-@keyframes rl3-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
 @keyframes rl3-fade-out { to { opacity: 0; transform: translateY(24px); } }
 
-.rl3--in .rl3-hold { animation: rl3-rise 500ms var(--ease-out) both; }
-.rl3--in .rl3-hold-ridge { stroke-dasharray: 1; animation: rl3-draw 700ms var(--ease-standard) 250ms both; }
-.rl3--in .rl3-rail { animation: rl3-wipe 500ms var(--ease-out) 100ms both; transform-origin: right center; }
-.rl3--in .rl3-rail > * { animation: rl3-up 400ms var(--ease-out) 300ms both; }
-.rl3--in .rl3-card { animation: rl3-up 450ms var(--ease-out) both; animation-delay: calc(350ms + var(--rl3-i, 0) * 40ms); }
+.rl3--in .rl3-rail { animation: rl3-wipe 500ms var(--ease-out) both; }
+.rl3--in .rl3-rail > * { animation: rl3-up 400ms var(--ease-out) 200ms both; }
+.rl3--in .rl3-card { animation: rl3-up 450ms var(--ease-out) both; animation-delay: calc(250ms + var(--rl3-i, 0) * 40ms); }
+.rl3--in .rl3-colour { animation: rl3-wipe 400ms var(--ease-out) both; animation-delay: calc(450ms + var(--rl3-i, 0) * 40ms); transform-origin: left center; }
 .rl3--out .rl3 { animation: rl3-fade-out 300ms var(--ease-standard) both; }
 
 @media (prefers-reduced-motion: reduce) {
-    .rl3--in .rl3-hold,
-    .rl3--in .rl3-hold-ridge,
+    .rl3--in .rl3-colour,
     .rl3--in .rl3-rail,
     .rl3--in .rl3-rail > *,
     .rl3--in .rl3-card,
@@ -442,18 +387,18 @@ body.rl3-page.rl3--preview-bg {
 
 .rl3-rail-type[data-tier].rl3-ph { color: var(--mf-muted); }
 
-.rl3-card-suit.rl3-ph {
-    background: repeating-linear-gradient(135deg, var(--mf-white) 0 10px, #eef0f1 10px 20px);
+.rl3-card-colours.rl3-ph {
+    align-items: center;
+    justify-content: center;
+    background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.14) 0 8px, rgba(255, 255, 255, 0.05) 8px 16px);
 }
 
-.rl3-suit-tag {
-    position: absolute;
-    right: 5px;
-    bottom: 4px;
-    font-size: 10px;
+.rl3-colour-tag {
+    font-size: 11px;
     font-weight: 700;
-    color: var(--mf-grey);
-    opacity: 0.7;
+    font-style: italic;
+    letter-spacing: 0.06em;
+    color: var(--mf-muted);
 }
 
 /* Guides (?guides=1 / G): outline every live field and name its key. */
@@ -480,7 +425,6 @@ body.rl3-page.rl3--preview-bg {
     white-space: nowrap;
 }
 
-.rl3--guides .rl3-card-suit[data-field]::before { left: auto; right: 2px; }
 
 /* ---------- Operator panel (?ctrl=1 / C) — keep off the program output ---------- */
 

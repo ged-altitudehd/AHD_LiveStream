@@ -1,19 +1,64 @@
 {
-  "race": { "title": "Schoolboy U18 Eight", "number": "42", "type": "fa" },
+  "race": {
+    "title": "Schoolboy U18 Eight",
+    "number": "42",
+    "type": "fa"
+  },
   "rules": {
-    "pace": { "enabled": true, "drop": 2.0, "window": 10 },
-    "rate": { "enabled": true, "rise": 3, "window": 10 },
+    "pace": {
+      "enabled": true,
+      "drop": 2.0,
+      "window": 10
+    },
+    "rate": {
+      "enabled": true,
+      "rise": 3,
+      "window": 10
+    },
     "hold": 5,
     "cooldown": 12
   },
   "lanes": [
-    { "lane": 1, "code": "agsb", "colors": ["#27296f"] },
-    { "lane": 2, "code": "kgca", "colors": ["#c8102e"] },
-    { "lane": 3, "code": "stpc", "colors": ["#004b87"], "rules": { "rate": { "rise": 4 } } },
-    { "lane": 4, "code": "hamb", "colors": ["#0a2240"] },
-    { "lane": 5, "code": "cbhs", "colors": ["#1a1a1a"] },
-    { "lane": 6, "code": "rotb", "colors": ["#006341"] },
-    { "lane": 7, "name": "Placeholder Crew", "colors": ["#e9b949", "#12325e"] },
-    { "lane": 8, "code": "rgtt", "colors": ["#00558c"] }
+    {
+      "lane": 1,
+      "code": "agsb"
+    },
+    {
+      "lane": 2,
+      "code": "kgca"
+    },
+    {
+      "lane": 3,
+      "code": "stpc",
+      "rules": {
+        "rate": {
+          "rise": 4
+        }
+      }
+    },
+    {
+      "lane": 4,
+      "code": "hamb"
+    },
+    {
+      "lane": 5,
+      "code": "cbhs"
+    },
+    {
+      "lane": 6,
+      "code": "rotb"
+    },
+    {
+      "lane": 7,
+      "name": "Placeholder Crew",
+      "colors": [
+        "#12325e",
+        "#e9b949"
+      ]
+    },
+    {
+      "lane": 8,
+      "code": "rgtt"
+    }
   ]
 }
