@@ -10,7 +10,8 @@
    - No logo or holding device here: Milford runs as a separate always-on bug, and the
      guide says the holding device is not used when the logo appears elsewhere.
    - Crews are shown by their row suit (white background cut out in the browser) and club code.
-   - Lane cards are 80% Milford grey and flip over to a near-solid (95%) side showing the split;
+   - Lane cards are 80% Milford grey and swipe up to a near-solid (95%) side showing the split
+     (and back down to the suit);
      a rating rise shows as a small "38 SPM" chip above the card's top-left corner (30% orange
      tint). The race number / title rail is solid Milford grey.
    - Race positions 1–3 get a gold / silver / bronze medal pop-up above the card's top-right
@@ -39,7 +40,7 @@
     /* Derived from Milford grey for broadcast surfaces */
     --mf-surface: #303c42;                  /* race rail: solid Milford grey */
     --mf-card: rgba(48, 60, 66, 0.8);       /* lane card front: 80%, a hint of the race behind */
-    --mf-card-back: rgba(48, 60, 66, 0.95); /* flipped data side: near-solid so pace / rating read cleanly */
+    --mf-card-back: rgba(48, 60, 66, 0.95); /* split side: near-solid so the split reads cleanly */
     --mf-card-empty: rgba(48, 60, 66, 0.4); /* lane in the race with no crew */
     --mf-surface-deep: #232c31;
     --mf-hairline: rgba(247, 247, 247, 0.16);
@@ -254,19 +255,18 @@ body.rl3-page {
     position: relative;
     flex: 0 0 var(--rl3-card-w);
     min-width: 0;
-    perspective: 900px;
 }
 
-/* Two-sided card: turns on its vertical axis to swap the suit for the data. */
-.rl3-card-flip {
+/* Card window: the suit side and the split side are stacked vertically inside it and
+   swipe up (suit → split) or back down (split → suit). */
+.rl3-card-window {
     position: relative;
     width: 100%;
     height: 100%;
-    transform-style: preserve-3d;
-    transition: transform 600ms var(--ease-standard);
+    overflow: hidden;
+    border-radius: var(--radius-card);
+    box-shadow: var(--mf-shadow);
 }
-
-.rl3-card--flipped .rl3-card-flip { transform: rotateY(180deg); }
 
 .rl3-face {
     position: absolute;
@@ -276,20 +276,21 @@ body.rl3-page {
     gap: 8px;
     padding: 10px;
     background: var(--mf-card);
-    border-radius: var(--radius-card);
-    box-shadow: var(--mf-shadow);
-    -webkit-backface-visibility: hidden;
-    backface-visibility: hidden;
+    transition: transform 500ms var(--ease-out);
 }
 
 .rl3-face--back {
-    transform: rotateY(180deg);
+    transform: translateY(100%);
     gap: 6px;
     background: var(--mf-card-back);
 }
 
+.rl3-card--split .rl3-face--front { transform: translateY(-100%); }
+.rl3-card--split .rl3-face--back { transform: none; }
+
 /* Lane in the race with no crew (scratched / empty): lane number only. */
-.rl3-card--empty .rl3-face--front { background: var(--mf-card-empty); box-shadow: none; }
+.rl3-card--empty .rl3-face--front { background: var(--mf-card-empty); }
+.rl3-card--empty .rl3-card-window { box-shadow: none; }
 .rl3-card--empty .rl3-card-lane { opacity: 0.7; }
 
 /* Row suit: RowIT PNG with its white background and code caption removed in JS,
@@ -556,7 +557,7 @@ body.rl3-page {
     .rl3--in .rl3-rail,
     .rl3--in .rl3-rail > *,
     .rl3--in .rl3-card { animation-duration: 1ms; animation-delay: 0ms; }
-    .rl3-card-flip,
+    .rl3-face,
     .rl3-rate,
     .rl3-medal { transition-duration: 1ms; }
     .rl3-medal--on::after { animation: none; }

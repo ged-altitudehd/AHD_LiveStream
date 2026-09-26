@@ -14,9 +14,9 @@
  *
  * Programmable lane cards — within a rolling window, when that crew's
  *   pace:  split (sec/500 m) drops by more than rules.pace.drop seconds, the card
- *          flips over to show the split in place of the suit;
+ *          swipes up to show the split in place of the suit (and back down after);
  *   rate:  stroke rating rises by more than rules.rate.rise spm, a small "38 SPM"
- *          pop-up appears above the card's top-left corner (the card does not flip).
+ *          pop-up appears above the card's top-left corner (the card doesn't swipe).
  * Both hold for rules.hold seconds. Rules are global with optional per-lane
  * overrides (lanes[i].rules).
  *
@@ -69,7 +69,7 @@
  *   split = seconds per 500 m (102.4) or "1:42.4"; rate = strokes per minute
  *
  * Keys: L in · O out · G guides · C control panel · B preview backdrop · D demo
- *       1–9 test pace flip on lane · Shift+1–9 test rating pop-up.
+ *       1–9 test split swipe on lane · Shift+1–9 test rating pop-up.
  */
 (function () {
     const MAX_LANES = 9;
@@ -131,7 +131,7 @@
         pollTimer: 0,
     };
 
-    /** lane number → { lane data, card elements, telemetry history, flip state } */
+    /** lane number → { lane data, card elements, telemetry history, split / pop-up state } */
     const rt = new Map();
 
     // ---------- utils ----------
@@ -533,7 +533,7 @@
     /** Two-sided card: front = suit + lane + code; back = the triggered data. */
     function makeCard(lane) {
         const root = el('div', 'rl3-card');
-        const flip = el('div', 'rl3-card-flip');
+        const win = el('div', 'rl3-card-window');
 
         const front = el('div', 'rl3-face rl3-face--front');
         const suit = el('div', 'rl3-card-suit');
@@ -559,13 +559,13 @@
         split.append(splitValue, foot);
         back.append(head, split);
 
-        // Rating pop-up: outside the flipping element, so it shows whichever face is up.
+        // Rating pop-up: outside the card window, so it shows whichever side is up.
         const rate = el('div', 'rl3-rate');
         rate.setAttribute('aria-hidden', 'true');
         const rateValue = el('span', 'rl3-rate-value');
         rate.append(rateValue, el('span', 'rl3-rate-unit', 'SPM'));
 
-        flip.append(front, back);
+        win.append(front, back);
         // Medal pop-up (gold / silver / bronze by race position), above the top-right corner.
         const medal = el('div', 'rl3-medal');
         medal.setAttribute('aria-hidden', 'true');
@@ -574,7 +574,7 @@
         const medalText = el('span', 'rl3-medal-text');
         medal.append(medalImg, medalText);
 
-        root.append(flip, medal, rate);
+        root.append(win, medal, rate);
         return {
             root, back, suit, laneEl, code, backLane, backCode, splitValue, splitDelta,
             rate, rateValue, medal, medalImg, medalText, suitKey: null, timer: 0, rateTimer: 0,
@@ -620,10 +620,10 @@
                 r = { data, id: null, card: makeCard(data.lane), hist: [], base: { pace: -Infinity, rate: -Infinity }, cool: { pace: -Infinity, rate: -Infinity } };
                 rt.set(data.lane, r);
             }
-            // A different crew in this lane starts clean: no inherited history, cooldown or flip.
+            // A different crew in this lane starts clean: no inherited history, cooldown or split.
             const id = crewId(data);
             if (r.id !== null && r.id !== id) {
-                unflip(r);
+                resetCard(r);
                 r.hist = [];
                 r.base = { pace: -Infinity, rate: -Infinity };
                 r.cool = { pace: -Infinity, rate: -Infinity };
@@ -632,7 +632,7 @@
             r.data = data;
             const c = r.card;
             // Move a card only when it is out of place: re-inserting restarts its entrance
-            // animation and cuts a flip short, which a 1 s poll feed would do every second.
+            // animation and cuts a swipe short, which a 1 s poll feed would do every second.
             if (lanesEl.children[i] !== c.root) lanesEl.insertBefore(c.root, lanesEl.children[i] || null);
             c.root.style.setProperty('--rl3-i', i);
             c.laneEl.textContent = String(data.lane);
@@ -640,7 +640,7 @@
             c.root.classList.toggle('rl3-card--empty', !!data.empty);
             if (data.empty) {
                 // Lane is in the race but has no crew: show the lane number only.
-                unflip(r);
+                resetCard(r);
                 c.code.textContent = '';
                 c.code.classList.remove('rl3-ph');
                 c.code.style.fontSize = '';
@@ -735,7 +735,7 @@
 
     function evaluate(r, cur, rules) {
         // While hidden, or for a lane with no crew, keep the history but don't fire (so the
-        // cooldown isn't used up by a flip nobody sees).
+        // cooldown isn't used up by a split nobody sees).
         if (!state.shown || r.data.empty) return;
         const t = cur.t;
         if (rules.pace.enabled && Number.isFinite(cur.split)) {
@@ -746,7 +746,7 @@
             if (drop > rules.pace.drop && t >= r.cool.pace) {
                 r.cool.pace = t + rules.cooldown;
                 r.base.pace = t;
-                flipCard(r, { value: cur.split, delta: -drop }, rules);
+                showSplit(r, { value: cur.split, delta: -drop }, rules);
             }
         }
         if (rules.rate.enabled && Number.isFinite(cur.rate)) {
@@ -762,22 +762,21 @@
         }
     }
 
-    const FLIP_MS = 600; // matches .rl3-card-flip transition
     const SPLIT_FONT = { max: 60, min: 30 }; // px: as large as the card width allows
     const CODE_FONT = { max: 25, min: 15 };
 
-    /** Pace: flip the card to show the split in place of the suit; holds, then flips back. */
-    function flipCard(r, info, rules) {
+    /** Pace: swipe the card up to show the split in place of the suit; holds, then swipes back down. */
+    function showSplit(r, info, rules) {
         if (!state.shown || r.data.empty) return;
         const c = r.card;
         const hold = (rules || rulesFor(r.data.lane)).hold * 1000;
         renderSplit(c, info);
-        c.root.classList.add('rl3-card--flipped');
+        c.root.classList.add('rl3-card--split');
         clearTimeout(c.timer);
-        c.timer = setTimeout(() => c.root.classList.remove('rl3-card--flipped'), hold);
+        c.timer = setTimeout(() => c.root.classList.remove('rl3-card--split'), hold);
     }
 
-    /** Rating: small "38 SPM" pop-up above the card's top-left corner; the card doesn't flip. */
+    /** Rating: small "38 SPM" pop-up above the card's top-left corner; the card doesn't swipe. */
     function popRating(r, info, rules) {
         if (!state.shown || r.data.empty) return;
         const c = r.card;
@@ -788,11 +787,12 @@
         c.rateTimer = setTimeout(() => c.rate.classList.remove('rl3-rate--on'), hold);
     }
 
-    function unflip(r) {
+    /** Back to the suit side, rating pop-up hidden (medal pop-ups follow positions). */
+    function resetCard(r) {
         const c = r.card;
         clearTimeout(c.timer);
         clearTimeout(c.rateTimer);
-        c.root.classList.remove('rl3-card--flipped');
+        c.root.classList.remove('rl3-card--split');
         c.rate.classList.remove('rl3-rate--on');
     }
 
@@ -812,8 +812,8 @@
         fitText(c.splitValue, SPLIT_FONT);
     }
 
-    function resetFlips() {
-        for (const r of rt.values()) unflip(r);
+    function resetCards() {
+        for (const r of rt.values()) resetCard(r);
     }
 
     /** Manual / test trigger using the lane's latest sample (or a plausible value). */
@@ -823,7 +823,7 @@
         const last = [...r.hist].reverse().find((s) => Number.isFinite(kind === 'pace' ? s.split : s.rate));
         const rules = rulesFor(r.data.lane);
         if (kind === 'pace') {
-            flipCard(r, { value: last ? last.split : 98.6, delta: -(rules.pace.drop + 0.4) }, rules);
+            showSplit(r, { value: last ? last.split : 98.6, delta: -(rules.pace.drop + 0.4) }, rules);
         } else {
             popRating(r, { value: last ? last.rate : 38, delta: rules.rate.rise + 1 }, rules);
         }
@@ -843,7 +843,7 @@
         state.shown = false;
         body.classList.remove('rl3--in');
         body.classList.add('rl3--out');
-        resetFlips();
+        resetCards();
         setTimeout(() => {
             if (!state.shown) body.classList.remove('rl3--on', 'rl3--out');
         }, 480);
@@ -993,7 +993,7 @@
         );
 
         const timing = el('fieldset');
-        timing.appendChild(el('legend', null, 'Pace flip / rating pop-up'));
+        timing.appendChild(el('legend', null, 'Split swipe / rating pop-up'));
         timing.append(
             ctrlField('Show data for (s)', 'rules.hold', 'number', { step: 0.5, min: 1 }),
             ctrlField('Cooldown per lane (s)', 'rules.cooldown', 'number', { step: 1, min: 0 }),
@@ -1014,7 +1014,7 @@
             btn('In', show),
             btn('Out', hide),
             laneSel,
-            btn('Flip: pace', () => fire(laneSel.value, 'pace'), true),
+            btn('Show split', () => fire(laneSel.value, 'pace'), true),
             btn('Rating pop-up', () => fire(laneSel.value, 'rate'), true),
             btn('Demo', () => (state.demoTimer ? stopDemo() : startDemo()), true),
             btn('Guides', () => body.classList.toggle('rl3--guides'), true),
@@ -1024,7 +1024,7 @@
             el(
                 'p',
                 'rl3-ctrl-hint',
-                'Hide this panel (C) before going to air. Keys: L in · O out · G guides · B backdrop · D demo · 1–9 flip pace · Shift+1–9 rating pop-up.',
+                'Hide this panel (C) before going to air. Keys: L in · O out · G guides · B backdrop · D demo · 1–9 split swipe · Shift+1–9 rating pop-up.',
             ),
         );
 
