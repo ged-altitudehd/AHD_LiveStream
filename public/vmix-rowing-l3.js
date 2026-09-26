@@ -3,10 +3,10 @@
  *
  * Live fields (all marked data-field; shown as dashed/italic placeholders until
  * a live value arrives):
- *   race.title · race.number · race.type · lane[n].code · lane[n].colors   (n = 1–9)
+ *   race.title · race.number · race.type · lane[n].code · lane[n].suit   (n = 1–9)
  *
- * Lane cards show the school/club code (e.g. AGSB), not the full name, and the
- * crew's row-suit colours as a horizontal colour bar (not the suit picture).
+ * Lane cards show the crew's row suit (white background cut out) and the
+ * school/club code (e.g. AGSB), not the full name.
  * Styled to the Milford Asset Management brand guidelines (see vmix-rowing-l3.css).
  *
  * Programmable lane cards — a sub-card pops above a lane when, within a rolling
@@ -34,10 +34,10 @@
  *     show: true | false
  *   }
  *   code   = RowIT club code, shown on the card; also finds the row-suit PNG in data/ahd-lookup.json
- *   colors = row-suit colours for the colour bar, main colour first (wins over everything)
- *   suit   = row-suit image URL to read colours from when colors is not given
- *            (default: the club's RowIT suit PNG). Colours are sampled from the suit
- *            itself — background and the code caption under the suit are ignored.
+ *   suit   = row-suit image URL (default: the club's RowIT suit PNG). The white
+ *            background and the code caption under the suit are removed in the browser
+ *            (needs the page served over http; from file:// the PNG shows as supplied).
+ *   colors = placeholder suit colours, main colour first, when there is no suit image
  *   name   = full school/club name (optional; not shown)
  *   split = seconds per 500 m (102.4) or "1:42.4"; rate = strokes per minute
  *
@@ -230,51 +230,75 @@
         return Array.from({ length: state.laneCount }, (_, i) => ({ lane: i + 1 }));
     }
 
-    // ---------- row-suit colours ----------
+    // ---------- row suits ----------
 
-    /** suit image URL → Promise<[{ hex, share }] | null> */
-    const colourCache = new Map();
+    function suitSvg(colors) {
+        const a = colors?.[0] || 'rgba(247, 247, 247, 0.55)';
+        const b = colors?.[1] || 'rgba(247, 247, 247, 0.3)';
+        return (
+            '<svg class="rl3-suit-svg" viewBox="0 0 60 84" aria-hidden="true">' +
+            `<path d="M14 0h8v9c0 6 3.5 11 8 11s8-5 8-11V0h8v10c0 5 3.5 8 9 9v58c0 4-2 7-6 7H11c-4 0-6-3-6-7V19c5.5-1 9-4 9-9z" fill="${a}"/>` +
+            `<path d="M14 0h8v9c0 6 3.5 11 8 11s8-5 8-11V0h8v10c0 5 3.5 8 9 9v4c-6-1-11-5-11-11v-8h-2v5c0 8-5 15-12 15s-12-7-12-15V4h-2v8c0 6-5 10-11 11v-4c5.5-1 9-4 9-9z" fill="${b}"/>` +
+            '</svg>'
+        );
+    }
 
-    function suitColours(url) {
-        if (!colourCache.has(url)) {
-            colourCache.set(
+    /** suit image URL → Promise<data URL of the cut-out suit, or the original URL> */
+    const suitCache = new Map();
+
+    function cutoutSuit(url) {
+        if (!suitCache.has(url)) {
+            suitCache.set(
                 url,
-                new Promise((resolve) => {
+                new Promise((resolve, reject) => {
                     const img = new Image();
                     img.onload = () => {
                         try {
-                            resolve(extractColours(img));
+                            resolve(cutout(img));
                         } catch {
-                            resolve(null); // e.g. cross-origin image taints the canvas
+                            resolve(url); // e.g. file:// or cross-origin taints the canvas: show as supplied
                         }
                     };
-                    img.onerror = () => resolve(null);
+                    img.onerror = () => reject(new Error('missing suit'));
                     img.src = url;
                 }),
             );
         }
-        return colourCache.get(url);
+        return suitCache.get(url);
     }
 
     /**
-     * Main colours of a RowIT suit PNG: suit on a white/transparent square with the
-     * club code printed underneath. Flood-fills the background in from the top and
-     * sides (so white parts of the suit itself still count), skips the caption rows,
-     * then clusters what's left and keeps colours covering at least 6% of the suit.
+     * RowIT suit PNGs: suit on a white (or transparent) square with the club code
+     * printed underneath. Drops the caption (the last band of rows in the lower half),
+     * flood-fills the background in from the edges so white parts of the suit itself
+     * survive, then trims to the suit.
      */
-    function extractColours(img) {
-        const W = 120;
-        const H = Math.round((W * img.naturalHeight) / img.naturalWidth) || W;
-        const rows = Math.round(H * 0.8);
+    function cutout(img) {
+        const H = Math.min(240, img.naturalHeight || 240);
+        const W = Math.max(1, Math.round((H * img.naturalWidth) / img.naturalHeight));
         const cv = document.createElement('canvas');
         cv.width = W;
         cv.height = H;
         const ctx = cv.getContext('2d', { willReadFrequently: true });
         ctx.drawImage(img, 0, 0, W, H);
-        const px = ctx.getImageData(0, 0, W, rows).data;
+        const im = ctx.getImageData(0, 0, W, H);
+        const px = im.data;
         const isBg = (i) => px[i * 4 + 3] < 40 || Math.min(px[i * 4], px[i * 4 + 1], px[i * 4 + 2]) > 232;
 
-        const bg = new Uint8Array(W * rows);
+        // Caption: last run of occupied rows, if it starts in the lower half after a gap.
+        const occ = new Array(H).fill(0);
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (!isBg(y * W + x)) occ[y]++;
+        const runs = [];
+        for (let y = 0; y < H; ) {
+            while (y < H && !occ[y]) y++;
+            const start = y;
+            while (y < H && occ[y]) y++;
+            if (y > start) runs.push(start);
+        }
+        const rows = runs.length >= 2 && runs[runs.length - 1] > H * 0.5 ? runs[runs.length - 1] : H;
+
+        const bg = new Uint8Array(W * H);
+        for (let i = rows * W; i < W * H; i++) bg[i] = 1;
         const stack = [];
         const seed = (i) => {
             if (!bg[i] && isBg(i)) {
@@ -287,109 +311,77 @@
             seed(y * W);
             seed(y * W + W - 1);
         }
+        if (rows > 0) for (let x = 0; x < W; x++) seed((rows - 1) * W + x);
         while (stack.length) {
             const i = stack.pop();
             const x = i % W;
             if (x > 0) seed(i - 1);
             if (x < W - 1) seed(i + 1);
             if (i >= W) seed(i - W);
-            if (i + W < W * rows) seed(i + W);
+            if (i + W < W * H) seed(i + W);
         }
 
-        const buckets = new Map();
-        let total = 0;
-        for (let i = 0; i < W * rows; i++) {
-            if (bg[i] || px[i * 4 + 3] < 200) continue;
-            const r = px[i * 4];
-            const g = px[i * 4 + 1];
-            const b = px[i * 4 + 2];
-            const key = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
-            const k = buckets.get(key) || { n: 0, r: 0, g: 0, b: 0 };
-            k.n++;
-            k.r += r;
-            k.g += g;
-            k.b += b;
-            buckets.set(key, k);
-            total++;
-        }
-        if (!total) return null;
-
-        const clusters = [];
-        for (const k of [...buckets.values()].sort((a, b) => b.n - a.n)) {
-            const c = [k.r / k.n, k.g / k.n, k.b / k.n];
-            const hit = clusters.find((cl) => Math.hypot(cl.r / cl.n - c[0], cl.g / cl.n - c[1], cl.b / cl.n - c[2]) < 56);
-            if (hit) {
-                hit.n += k.n;
-                hit.r += k.r;
-                hit.g += k.g;
-                hit.b += k.b;
-            } else {
-                clusters.push({ ...k });
+        let minX = W;
+        let minY = H;
+        let maxX = -1;
+        let maxY = -1;
+        for (let i = 0; i < W * H; i++) {
+            if (bg[i]) {
+                px[i * 4 + 3] = 0;
+                continue;
             }
+            const x = i % W;
+            const y = (i / W) | 0;
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
         }
-        const hex = (v) => Math.round(v).toString(16).padStart(2, '0');
-        const out = clusters
-            .map((cl) => ({ hex: `#${hex(cl.r / cl.n)}${hex(cl.g / cl.n)}${hex(cl.b / cl.n)}`, share: cl.n / total }))
-            .filter((c) => c.share >= 0.06)
-            .sort((a, b) => b.share - a.share)
-            .slice(0, 3);
-        return out.length ? out : null;
+        if (maxX < 0) throw new Error('empty suit');
+        ctx.putImageData(im, 0, 0);
+        const out = document.createElement('canvas');
+        out.width = maxX - minX + 1;
+        out.height = maxY - minY + 1;
+        out.getContext('2d').drawImage(cv, minX, minY, out.width, out.height, 0, 0, out.width, out.height);
+        return out.toDataURL('image/png');
     }
 
     function makeCard(lane) {
         const root = el('div', 'rl3-card');
         const subs = el('div', 'rl3-subs');
-        const swatch = el('div', 'rl3-card-colours');
-        swatch.dataset.field = `lane${lane}.colors`;
+        const suit = el('div', 'rl3-card-suit');
+        suit.dataset.field = `lane${lane}.suit`;
         const row = el('div', 'rl3-card-row');
         const laneEl = el('div', 'rl3-card-lane', String(lane));
         const code = el('div', 'rl3-card-code');
         code.dataset.field = `lane${lane}.code`;
         row.append(laneEl, code);
-        root.append(subs, swatch, row);
-        return { root, subs, swatch, laneEl, code, colourKey: null };
+        root.append(subs, suit, row);
+        return { root, subs, suit, laneEl, code, suitKey: null };
     }
 
-    /** Horizontal colour bar; main colour widest, secondary colours narrower.
-     *  One element with hard gradient stops, so there are no sub-pixel seams. */
-    function drawColours(card, colours) {
-        const weights = colours.map((c) => Math.max(c.share ?? 1, 0.22));
-        const sum = weights.reduce((a, b) => a + b, 0);
-        let at = 0;
-        const stops = colours.map((c, i) => {
-            const from = at;
-            at += (weights[i] / sum) * 100;
-            return `${c.hex} ${from.toFixed(2)}% ${i === colours.length - 1 ? 100 : at.toFixed(2)}%`;
-        });
-        const bar = el('span', 'rl3-colour');
-        bar.style.background = `linear-gradient(90deg, ${stops.join(', ')})`;
-        card.swatch.replaceChildren(bar);
-        card.swatch.classList.remove('rl3-ph');
-    }
-
-    function colourPlaceholder(card) {
-        card.swatch.replaceChildren(el('span', 'rl3-colour-tag', 'COLOURS'));
-        card.swatch.classList.add('rl3-ph');
-    }
-
-    function paintColours(card, data, info) {
-        const given = (Array.isArray(data.colors) ? data.colors : [data.colors]).filter((c) => !blank(c));
+    function paintSuit(card, data, info) {
         const url = !blank(data.suit) ? data.suit : info?.logo ? SUIT_DIR + encodeURIComponent(info.logo) : null;
-        const key = given.length ? `c:${given.join(',')}` : url ? `u:${url}` : 'ph';
-        if (card.colourKey === key) return;
-        card.colourKey = key;
-        if (given.length) {
-            // Explicit colours: first is the main colour.
-            return drawColours(card, given.slice(0, 3).map((hex, i) => ({ hex, share: i ? 0.25 : 0.5 })));
-        }
-        if (!url) return colourPlaceholder(card);
-        card.swatch.replaceChildren();
-        card.swatch.classList.remove('rl3-ph');
-        suitColours(url).then((colours) => {
-            if (card.colourKey !== key) return;
-            if (colours) drawColours(card, colours);
-            else colourPlaceholder(card);
-        });
+        const key = url || `ph:${[].concat(data.colors || []).join(',')}`;
+        if (card.suitKey === key) return;
+        card.suitKey = key;
+        const placeholder = () => {
+            if (card.suitKey !== key) return;
+            card.suit.classList.add('rl3-ph');
+            card.suit.innerHTML = suitSvg([].concat(data.colors || []));
+            card.suit.appendChild(el('span', 'rl3-suit-tag', 'ROW SUIT'));
+        };
+        card.suit.replaceChildren();
+        if (!url) return placeholder();
+        card.suit.classList.remove('rl3-ph');
+        cutoutSuit(url).then((src) => {
+            if (card.suitKey !== key) return;
+            const img = el('img', 'rl3-suit-img');
+            img.alt = data.name || info?.name || '';
+            img.onerror = placeholder;
+            img.src = src;
+            card.suit.replaceChildren(img);
+        }, placeholder);
     }
 
     function renderLanes() {
@@ -413,7 +405,7 @@
             const info = club(data.code);
             c.laneEl.textContent = String(data.lane);
             setField(c.code, blank(data.code) ? null : String(data.code).trim().toUpperCase(), PH.code);
-            paintColours(c, data, info);
+            paintSuit(c, data, info);
             lanesEl.appendChild(c.root); // keeps DOM order = list order
         });
         if (!state.lookup && list.some((l) => !blank(l.code))) loadLookup();

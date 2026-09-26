@@ -9,7 +9,9 @@
    - Lozenge: rounded rectangle used to highlight a key word or call to action (race type here).
    - No logo or holding device here: Milford runs as a separate always-on bug, and the
      guide says the holding device is not used when the logo appears elsewhere.
-   - Crews are shown by club code plus a bar of their row-suit colours. */
+   - Crews are shown by their row suit (white background cut out in the browser) and club code.
+   - Panels sit at ~30% opacity so the race shows through; text carries a soft shadow
+     to stay legible over bright water. */
 
 @font-face {
     font-family: 'Montserrat';
@@ -30,7 +32,7 @@
     --mf-white: #ffffff;
 
     /* Derived from Milford grey for broadcast surfaces */
-    --mf-surface: rgba(48, 60, 66, 0.94);
+    --mf-surface: rgba(48, 60, 66, 0.3);
     --mf-surface-deep: #232c31;
     --mf-hairline: rgba(247, 247, 247, 0.16);
     --mf-muted: rgba(247, 247, 247, 0.62);
@@ -46,7 +48,7 @@
     --ease-standard: cubic-bezier(0.2, 0, 0.2, 1);
 
     --rl3-gap: 8px;
-    --rl3-card-h: 96px;
+    --rl3-card-h: 150px;
     --rl3-rail-h: 60px;
 }
 
@@ -62,6 +64,7 @@ body.rl3-page {
     color: var(--mf-white);
     font-family: var(--font);
     font-variant-numeric: tabular-nums;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
     -webkit-font-smoothing: antialiased;
 }
 
@@ -197,33 +200,30 @@ body.rl3-page.rl3--preview-bg {
     box-shadow: var(--mf-shadow);
 }
 
-/* Row-suit colours as a horizontal rectangle; main colour widest. The inset hairline
-   keeps dark colours (navy, black) readable against Milford grey. */
-.rl3-card-colours {
+/* Row suit: RowIT PNG with its white background and code caption removed in JS,
+   so the suit sits straight on the translucent card. */
+.rl3-card-suit {
     position: relative;
-    flex: 0 0 34px;
+    flex: 1 1 auto;
+    min-height: 0;
     display: flex;
-    overflow: hidden;
-    border-radius: 4px;
-    background: rgba(255, 255, 255, 0.06);
+    align-items: center;
+    justify-content: center;
 }
 
-.rl3-card-colours::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
-    pointer-events: none;
+.rl3-suit-img {
+    max-height: 100%;
+    max-width: 100%;
+    object-fit: contain;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35));
 }
 
-.rl3-colour {
-    flex: 1 1 0;
-    min-width: 0;
+.rl3-suit-svg {
+    height: 100%;
 }
 
 .rl3-card-row {
-    flex: 1 1 auto;
+    flex: 0 0 34px;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -363,11 +363,9 @@ body.rl3-page.rl3--preview-bg {
 .rl3--in .rl3-rail { animation: rl3-wipe 500ms var(--ease-out) both; }
 .rl3--in .rl3-rail > * { animation: rl3-up 400ms var(--ease-out) 200ms both; }
 .rl3--in .rl3-card { animation: rl3-up 450ms var(--ease-out) both; animation-delay: calc(250ms + var(--rl3-i, 0) * 40ms); }
-.rl3--in .rl3-colour { animation: rl3-wipe 400ms var(--ease-out) both; animation-delay: calc(450ms + var(--rl3-i, 0) * 40ms); transform-origin: left center; }
 .rl3--out .rl3 { animation: rl3-fade-out 300ms var(--ease-standard) both; }
 
 @media (prefers-reduced-motion: reduce) {
-    .rl3--in .rl3-colour,
     .rl3--in .rl3-rail,
     .rl3--in .rl3-rail > *,
     .rl3--in .rl3-card,
@@ -387,14 +385,16 @@ body.rl3-page.rl3--preview-bg {
 
 .rl3-rail-type[data-tier].rl3-ph { color: var(--mf-muted); }
 
-.rl3-card-colours.rl3-ph {
-    align-items: center;
-    justify-content: center;
+.rl3-card-suit.rl3-ph {
+    border-radius: 4px;
     background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.14) 0 8px, rgba(255, 255, 255, 0.05) 8px 16px);
 }
 
-.rl3-colour-tag {
-    font-size: 11px;
+.rl3-suit-tag {
+    position: absolute;
+    right: 4px;
+    bottom: 2px;
+    font-size: 10px;
     font-weight: 700;
     font-style: italic;
     letter-spacing: 0.06em;
@@ -429,6 +429,7 @@ body.rl3-page.rl3--preview-bg {
 /* ---------- Operator panel (?ctrl=1 / C) — keep off the program output ---------- */
 
 .rl3-ctrl {
+    text-shadow: none;
     position: absolute;
     left: 24px;
     top: 24px;
