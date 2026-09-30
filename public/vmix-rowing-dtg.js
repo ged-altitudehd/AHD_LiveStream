@@ -1,13 +1,16 @@
 /**
- * Distance to go — a translucent strip lying on the water along the buoy line, with white
- * text on the same plane counting down the metres left in the race. 1920×1080, transparent.
+ * Distance to go — the row of course buoys (10 m apart) as a countdown to the finish.
+ * A translucent strip lies on the water along the buoy row and each buoy carries the metres
+ * to go at that buoy, in white, lying on the water; the lead crew's live count rides along
+ * the row as they pass the buoys. 1920×1080, transparent.
  *
- * Placement (screen px, set once for the camera; ?guides=1 draws the strip corners):
- *   ?x1=560&y1=860   near end of the buoy line        ?w1=170  strip width there
- *   ?x2=1700&y2=640  far end of the buoy line         ?w2=70   strip width there
- *   ?len=0.62        use only this fraction of the line, from the near end (0–1)
- *   The strip is mapped onto those corners with a real projective transform, so the text
- *   foreshortens like the water does.
+ * Placement (screen px, set once for the camera; ?guides=1 draws the fit):
+ *   Two or three buoys whose distance to go is known, given as x,y,metres:
+ *     ?b1=1860,680,50   ?b2=1300,540,0   [?b3=1565,610,20]
+ *   Two buoys give a linear fit; a third lets the spacing shrink with distance the way the
+ *   camera sees it (perspective). ?range=0,80 draws buoys from 0 to 80 m to go along the
+ *   fitted line, every ?step=10 m (the buoy interval). ?w=90 strip width at the nearest buoy.
+ *   ?every=1 labels every buoy (2 = every second buoy, useful for a long stretch).
  *
  * Distance (any mix):
  *   ?dist=2000                 course length (default 2000)
@@ -15,97 +18,169 @@
  *   JS   window.RowingDtg.set(metresToGo) · .leader(metresCovered) · .show() · .hide() · .demo(on)
  *   msg  postMessage({ type: 'rowing-dtg', payload: { dtg | distance | distances: { lane: m } } })
  *   Between updates the count runs on at the leader's measured speed, so it ticks metre by metre.
- *   ?demo=1 runs a 2000 m race at ~5.4 m/s. ?opacity=0.35 strip opacity. ?text=0.9 text opacity.
+ *   ?demo=1 runs a 2000 m race. ?opacity=0.35 strip opacity · ?text=0.92 text opacity.
  *
  * Keys: L in · O out · D demo · G guides · B preview backdrop.
  */
 (function () {
     const q = new URLSearchParams(location.search);
     const num = (k, d) => (Number.isFinite(parseFloat(q.get(k))) ? parseFloat(q.get(k)) : d);
+    const list = (k, d) => (q.get(k) ? q.get(k).split(',').map(Number) : d);
     const body = document.body;
-    const strip = document.getElementById('dtgStrip');
-    const valueEl = document.getElementById('dtgValue');
-    const guides = document.getElementById('dtgGuides');
+    const svg = document.getElementById('dtgSvg');
+    const NS = 'http://www.w3.org/2000/svg';
 
+    const refs = [list('b1', [1862, 681, 40]), list('b2', [1305, 540, 0]), q.get('b3') ? list('b3', null) : [1565, 610, 20]]
+        .filter((r) => r && r.length === 3 && r.every(Number.isFinite))
+        .map(([x, y, d]) => ({ x, y, d }));
     const cfg = {
         course: num('dist', 2000),
-        near: { x: num('x1', 560), y: num('y1', 860), w: num('w1', 170) },
-        far: { x: num('x2', 1700), y: num('y2', 640), w: num('w2', 70) },
-        len: Math.max(0.15, Math.min(1, num('len', 0.62))),
-        W: 900, // strip's own size before projection
-        H: 160,
+        range: list('range', [0, 60]),
+        step: Math.max(1, num('step', 10)),
+        every: Math.max(1, Math.round(num('every', 1))),
+        w: num('w', 90),
     };
 
-    const st = {
-        target: null,   // latest distance to go from the feed
-        shown: null,    // what is displayed (runs on between updates)
-        speed: 0,       // m/s, from successive feed values
-        lastT: 0,
-        on: false,
-        demo: 0,
-        raf: 0,
-    };
+    const st = { target: null, shown: null, speed: 0, lastT: 0, on: false, demo: 0, raf: 0 };
 
-    // ---------- projective mapping: strip rectangle → four screen corners ----------
+    // ---------- buoy row: metres to go → screen point ----------
+    // Along the row, screen position is a projective (1-D homography) function of distance:
+    // t(d) = (a·d + b) / (c·d + 1). Three references fix a, b, c; two give the linear case.
 
-    function corners() {
-        const { near, far, len } = cfg;
-        const fx = near.x + (far.x - near.x) * len;
-        const fy = near.y + (far.y - near.y) * len;
-        const fw = near.w + (far.w - near.w) * len;
-        const dx = fx - near.x;
-        const dy = fy - near.y;
-        const L = Math.hypot(dx, dy) || 1;
-        // Perpendicular in screen space, pointing up-screen (away from the camera), so the
-        // strip's top edge is its far side and the text reads like paint on a road.
-        let nx = -dy / L;
-        let ny = dx / L;
-        if (ny > 0) { nx = -nx; ny = -ny; }
-        return [
-            { x: near.x + nx * (near.w / 2), y: near.y + ny * (near.w / 2) }, // near end, far side  (strip top-left)
-            { x: fx + nx * (fw / 2), y: fy + ny * (fw / 2) },                 // far end, far side   (top-right)
-            { x: fx - nx * (fw / 2), y: fy - ny * (fw / 2) },                 // far end, near side  (bottom-right)
-            { x: near.x - nx * (near.w / 2), y: near.y - ny * (near.w / 2) }, // near end, near side (bottom-left)
-        ];
-    }
+    const near = refs.reduce((m, r) => (m.d > r.d ? m : r)); // the buoy with most metres to go = start of the ruler
+    const far = refs.reduce((m, r) => (m.d < r.d ? m : r));
+    const axis = { x: far.x - near.x, y: far.y - near.y };
+    const axisLen = Math.hypot(axis.x, axis.y) || 1;
+    const tOf = (p) => ((p.x - near.x) * axis.x + (p.y - near.y) * axis.y) / (axisLen * axisLen); // 0 at near, 1 at far
 
-    /** Solve the 3×3 homography taking (0,0),(W,0),(W,H),(0,H) to the four corners. */
-    function homography(W, H, c) {
-        const src = [[0, 0], [W, 0], [W, H], [0, H]];
-        const A = [];
-        const b = [];
-        for (let i = 0; i < 4; i++) {
-            const [x, y] = src[i];
-            const { x: X, y: Y } = c[i];
-            A.push([x, y, 1, 0, 0, 0, -X * x, -X * y]); b.push(X);
-            A.push([0, 0, 0, x, y, 1, -Y * x, -Y * y]); b.push(Y);
-        }
-        // Gaussian elimination
-        for (let col = 0; col < 8; col++) {
-            let piv = col;
-            for (let r = col + 1; r < 8; r++) if (Math.abs(A[r][col]) > Math.abs(A[piv][col])) piv = r;
-            [A[col], A[piv]] = [A[piv], A[col]]; [b[col], b[piv]] = [b[piv], b[col]];
-            for (let r = 0; r < 8; r++) {
-                if (r === col) continue;
-                const f = A[r][col] / A[col][col];
-                for (let k = col; k < 8; k++) A[r][k] -= f * A[col][k];
-                b[r] -= f * b[col];
+    let tFn;
+    {
+        const pts = refs.map((r) => ({ d: r.d, t: tOf(r) }));
+        if (pts.length >= 3) {
+            // Solve t(c·d + 1) = a·d + b for the three points.
+            const [p0, p1, p2] = pts;
+            const M = [
+                [p0.d, 1, -p0.t * p0.d],
+                [p1.d, 1, -p1.t * p1.d],
+                [p2.d, 1, -p2.t * p2.d],
+            ];
+            const v = [p0.t, p1.t, p2.t];
+            const det = (m) => m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+            const D = det(M);
+            const col = (i) => M.map((row, r) => row.map((val, c) => (c === i ? v[r] : val)));
+            if (Math.abs(D) > 1e-9) {
+                const a = det(col(0)) / D;
+                const b = det(col(1)) / D;
+                const c = det(col(2)) / D;
+                tFn = (d) => (a * d + b) / (c * d + 1);
             }
         }
-        const h = b.map((v, i) => v / A[i][i]);
-        // CSS matrix3d is column-major 4×4; embed the 3×3 (with z untouched).
-        return `matrix3d(${h[0]},${h[3]},0,${h[6]}, ${h[1]},${h[4]},0,${h[7]}, 0,0,1,0, ${h[2]},${h[5]},0,1)`;
+        if (!tFn) {
+            const dd = far.d - near.d || 1;
+            tFn = (d) => (d - near.d) / dd;
+        }
     }
 
-    function place() {
-        const c = corners();
-        strip.style.width = `${cfg.W}px`;
-        strip.style.height = `${cfg.H}px`;
-        strip.style.transform = homography(cfg.W, cfg.H, c);
-        guides.innerHTML =
-            `<polygon points="${c.map((p) => `${p.x},${p.y}`).join(' ')}"/>` +
-            `<line x1="${cfg.near.x}" y1="${cfg.near.y}" x2="${cfg.far.x}" y2="${cfg.far.y}"/>` +
-            c.map((p, i) => `<circle cx="${p.x}" cy="${p.y}" r="6"/><text x="${p.x + 10}" y="${p.y - 8}">${['near · far side', 'far · far side', 'far · near side', 'near · near side'][i]}</text>`).join('');
+    const pointAt = (d) => {
+        const t = tFn(d);
+        return { x: near.x + axis.x * t, y: near.y + axis.y * t, t };
+    };
+    /** Local screen scale at a buoy: how far apart neighbouring buoys are there (px per step). */
+    const spacingAt = (d) => {
+        const a = pointAt(d);
+        const b = pointAt(d - cfg.step);
+        return Math.hypot(b.x - a.x, b.y - a.y);
+    };
+    const nearSpacing = spacingAt(near.d);
+    // Perpendicular to the row, pointing down-screen (toward the camera) so labels sit this side.
+    let px = -axis.y / axisLen;
+    let py = axis.x / axisLen;
+    if (py < 0) { px = -px; py = -py; }
+    // Text runs along the row but always reads left → right (never upside down).
+    let angle = (Math.atan2(axis.y, axis.x) * 180) / Math.PI;
+    if (angle > 90) angle -= 180;
+    if (angle < -90) angle += 180;
+    const clampS = (s) => Math.max(0.45, Math.min(1.6, s));
+
+    // ---------- drawing ----------
+
+    function el(tag, attrs, text) {
+        const n = document.createElementNS(NS, tag);
+        for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+        if (text != null) n.textContent = text;
+        return n;
+    }
+
+    /** Text lying on the water: rotated along the row, squashed toward the camera, sized by local spacing. */
+    function flatText(p, d, s, cls, text) {
+        const squash = 0.55; // the water plane seen at a low angle
+        return el('text', {
+            class: cls,
+            transform: `translate(${p.x} ${p.y}) rotate(${angle}) scale(${s} ${s * squash})`,
+        }, text);
+    }
+
+    let liveLabel = null;
+    let liveDot = null;
+
+    function draw() {
+        svg.replaceChildren();
+        const [d0, d1] = cfg.range;
+        const lo = Math.min(d0, d1);
+        const hi = Math.max(d0, d1);
+
+        // Strip along the row, width shrinking with distance.
+        const left = [];
+        const right = [];
+        for (let d = lo; d <= hi + 1e-6; d += cfg.step / 2) {
+            const p = pointAt(d);
+            const w = cfg.w * clampS(spacingAt(d) / nearSpacing);
+            left.push(`${p.x - px * w * 0.35},${p.y - py * w * 0.35}`);
+            right.unshift(`${p.x + px * w * 0.65},${p.y + py * w * 0.65}`);
+        }
+        svg.appendChild(el('polygon', { class: 'dtg-band', points: [...left, ...right].join(' ') }));
+
+        // Buoy marks and metres-to-go labels.
+        let i = 0;
+        for (let d = lo; d <= hi + 1e-6; d += cfg.step, i++) {
+            const p = pointAt(d);
+            const s = clampS(spacingAt(d) / nearSpacing);
+            svg.appendChild(el('circle', { class: 'dtg-tick', cx: p.x, cy: p.y, r: Math.max(2, 4 * s) }));
+            if (i % cfg.every) continue;
+            const lp = { x: p.x + px * 14 * s, y: p.y + py * 14 * s };
+            svg.appendChild(flatText(lp, d, s, 'dtg-mark', d === 0 ? 'FINISH' : String(d)));
+        }
+
+        // The lead crew's live count: rides the row while in range, else parks at the row's start.
+        liveDot = svg.appendChild(el('circle', { class: 'dtg-live-dot', r: 7 }));
+        liveLabel = svg.appendChild(flatText({ x: 0, y: 0 }, 0, 1, 'dtg-live', ''));
+
+        // Guides: the reference buoys and their distances.
+        const g = el('g', { class: 'dtg-guides' });
+        for (const r of refs) {
+            g.appendChild(el('circle', { cx: r.x, cy: r.y, r: 9 }));
+            g.appendChild(el('text', { x: r.x + 12, y: r.y - 12 }, `${r.d} m to go (${r.x},${r.y})`));
+        }
+        g.appendChild(el('line', { x1: pointAt(lo).x, y1: pointAt(lo).y, x2: pointAt(hi).x, y2: pointAt(hi).y }));
+        svg.appendChild(g);
+    }
+
+    function placeLive(dtg) {
+        const [d0, d1] = cfg.range;
+        const lo = Math.min(d0, d1);
+        const hi = Math.max(d0, d1);
+        const inRange = dtg >= lo && dtg <= hi;
+        const d = inRange ? dtg : hi;
+        const p = pointAt(d);
+        const s = clampS(spacingAt(d) / nearSpacing);
+        liveDot.setAttribute('cx', p.x);
+        liveDot.setAttribute('cy', p.y);
+        liveDot.setAttribute('r', Math.max(4, 7 * s));
+        liveDot.classList.toggle('dtg-live-dot--on', inRange);
+        const lp = { x: p.x - px * 30 * s, y: p.y - py * 30 * s }; // the far side of the row, clear of the buoy labels
+        liveLabel.setAttribute('transform', `translate(${lp.x} ${lp.y}) rotate(${angle}) scale(${s} ${s * 0.55})`);
+        liveLabel.textContent = `${Math.ceil(dtg).toLocaleString('en-NZ')} m to go`;
+        liveLabel.classList.toggle('dtg-live--finish', dtg <= 100);
     }
 
     // ---------- distance ----------
@@ -125,29 +200,22 @@
         if (!st.raf) st.raf = requestAnimationFrame(frame);
     }
 
-    /** Run the displayed value on at the leader's speed; snap gently to the feed. */
     let prevFrame = 0;
     function frame(now) {
         st.raf = 0;
         const dt = prevFrame ? (now - prevFrame) / 1000 : 0;
         prevFrame = now;
         if (st.target == null) return;
-        let v = st.shown - st.speed * dt;
+        let v = st.shown - st.speed * dt; // run on at the leader's speed between samples
         const err = st.target - v;
-        // Ease toward the feed value (a fresh sample) without jumping backwards visibly.
         if (Math.abs(err) > 25) v = st.target;
         else v += err * Math.min(1, dt * 1.5);
         st.shown = Math.max(0, v);
-        const m = Math.ceil(st.shown);
-        const text = m.toLocaleString('en-NZ');
-        if (valueEl.textContent !== text) valueEl.textContent = text;
-        strip.classList.toggle('dtg-strip--finish', m <= 100);
+        placeLive(st.shown);
         if (st.shown > 0 || st.target > 0) st.raf = requestAnimationFrame(frame);
     }
 
-    function leader(metresCovered) {
-        setTarget(cfg.course - Number(metresCovered));
-    }
+    const leader = (metresCovered) => setTarget(cfg.course - Number(metresCovered));
 
     function apply(p) {
         if (!p || typeof p !== 'object') return;
@@ -182,14 +250,15 @@
         clearInterval(st.demo);
         st.demo = 0;
         if (on === false) return;
-        let covered = 0;
+        // Start with 140 m to go so the count reaches the buoys in view within seconds.
         const t0 = performance.now();
+        const startCovered = Math.max(0, cfg.course - 140);
         st.demo = setInterval(() => {
             const t = (performance.now() - t0) / 1000;
-            covered = Math.min(cfg.course, t * (5.4 + 0.3 * Math.sin(t / 7)));
+            const covered = Math.min(cfg.course, startCovered + t * (5.4 + 0.3 * Math.sin(t / 7)));
             leader(covered);
             if (covered >= cfg.course) { clearInterval(st.demo); st.demo = 0; }
-        }, 1000); // feed cadence: the count runs on between samples
+        }, 1000);
     }
 
     function poll(url, ms) {
@@ -213,12 +282,12 @@
     });
     window.addEventListener('message', (e) => e.data?.type === 'rowing-dtg' && apply(e.data.payload));
 
-    window.RowingDtg = { set: setTarget, leader, apply, show, hide, demo, place, cfg };
+    window.RowingDtg = { set: setTarget, leader, apply, show, hide, demo, draw, cfg, refs };
 
     // ---------- boot ----------
     document.documentElement.style.setProperty('--dtg-strip-opacity', String(num('opacity', 0.35)));
-    document.documentElement.style.setProperty('--dtg-text-opacity', String(num('text', 0.9)));
-    place();
+    document.documentElement.style.setProperty('--dtg-text-opacity', String(num('text', 0.92)));
+    draw();
     setTarget(cfg.course);
     if (q.get('guides') === '1') body.classList.add('dtg--guides');
     if (q.get('bg') === '1') body.classList.add('rl3--preview-bg');

@@ -8,15 +8,12 @@
     <link rel="stylesheet" href="vmix-rowing-l3.css?v=7">
 </head>
 <body class="rl3-page dtg-page">
-    <!-- 1920×1080, transparent. A translucent strip lying on the water along the buoy line, with the
-         metres to go counting down on the same plane. Placement and feed: see vmix-rowing-dtg.js. -->
+    <!-- 1920×1080, transparent. The row of course buoys (10 m apart) as a countdown to the finish: a
+         translucent strip along the row, metres to go at each buoy, the lead crew's live count riding
+         the row. Placement and feed: see vmix-rowing-dtg.js. -->
     <div class="rl3-stage" id="rl3Stage">
-        <div class="dtg-strip" id="dtgStrip" aria-label="Distance to go">
-            <span class="dtg-value" id="dtgValue" data-field="race.distanceToGo">2,000</span>
-            <span class="dtg-unit">m to go</span>
-        </div>
-        <svg class="dtg-guides" id="dtgGuides" viewBox="0 0 1920 1080" aria-hidden="true"></svg>
+        <svg class="dtg-svg" id="dtgSvg" viewBox="0 0 1920 1080" aria-label="Distance to go along the buoy row"></svg>
     </div>
-    <script src="vmix-rowing-dtg.js?v=1"></script>
+    <script src="vmix-rowing-dtg.js?v=2"></script>
 </body>
 </html>

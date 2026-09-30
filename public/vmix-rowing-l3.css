@@ -993,68 +993,73 @@ body.rl3-page {
 }
 
 /* ---------- Distance to go (vmix-rowing-dtg.html) ----------
-   A translucent strip projected onto the water along the buoy line (matrix3d from four screen
-   corners, set in vmix-rowing-dtg.js) with white text on the same plane. */
+   The buoy row as a countdown: a translucent band along the row, a white metres-to-go
+   number lying on the water beside each buoy, and the lead crew's live count riding the row. */
 
-.dtg-strip {
-    position: absolute;
-    left: 0;
-    top: 0;
-    transform-origin: 0 0;
-    display: flex;
-    align-items: baseline;
-    justify-content: center;
-    gap: 22px;
-    padding: 0 40px;
-    box-sizing: border-box;
-    border-radius: 14px;
-    background: linear-gradient(90deg, rgba(48, 60, 66, 0) 0%, rgba(48, 60, 66, 1) 12%, rgba(48, 60, 66, 1) 88%, rgba(48, 60, 66, 0) 100%);
-    opacity: 0;
-    transition: opacity 600ms var(--ease-standard);
-    pointer-events: none;
-    will-change: transform;
-}
-
-.dtg--on .dtg-strip { opacity: var(--dtg-strip-opacity, 0.35); }
-.dtg--out .dtg-strip { opacity: 0; }
-
-.dtg-value,
-.dtg-unit {
-    color: var(--mf-white);
-    opacity: calc(var(--dtg-text-opacity, 0.9) / var(--dtg-strip-opacity, 0.35)); /* text stays bright inside the faint strip */
-    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
-    white-space: nowrap;
-    font-variant-numeric: tabular-nums;
-}
-
-.dtg-value {
-    font-size: 118px;
-    font-weight: 700;
-    line-height: 1;
-    letter-spacing: -0.03em;
-}
-
-.dtg-unit {
-    font-size: 44px;
-    font-weight: 600;
-    letter-spacing: -0.01em;
-}
-
-.dtg-strip--finish .dtg-value { color: var(--mf-orange-30); }
-
-.dtg-guides {
-    display: none;
+.dtg-svg {
     position: absolute;
     inset: 0;
     width: 1920px;
     height: 1080px;
     pointer-events: none;
-    fill: rgba(225, 105, 14, 0.15);
-    stroke: var(--mf-orange);
-    stroke-width: 2;
-    font: 700 13px ui-monospace, monospace;
+    opacity: 0;
+    transition: opacity 600ms var(--ease-standard);
+    font-family: var(--font);
+    font-variant-numeric: tabular-nums;
 }
 
-.dtg-guides text { fill: var(--mf-orange); stroke: none; }
-.dtg-guides circle { fill: var(--mf-orange); }
+.dtg--on .dtg-svg { opacity: 1; }
+.dtg--out .dtg-svg { opacity: 0; }
+
+.dtg-band {
+    fill: var(--mf-grey);
+    fill-opacity: var(--dtg-strip-opacity, 0.35);
+}
+
+.dtg-tick {
+    fill: var(--mf-white);
+    fill-opacity: 0.55;
+}
+
+.dtg-mark,
+.dtg-live {
+    fill: var(--mf-white);
+    fill-opacity: var(--dtg-text-opacity, 0.92);
+    font-weight: 700;
+    text-anchor: middle;
+    dominant-baseline: hanging;
+    paint-order: stroke;
+    stroke: rgba(0, 0, 0, 0.25);
+    stroke-width: 1.5px;
+}
+
+.dtg-mark { font-size: 34px; letter-spacing: -0.02em; }
+
+.dtg-live {
+    font-size: 40px;
+    letter-spacing: -0.03em;
+    dominant-baseline: auto;
+}
+
+.dtg-live--finish { fill: var(--mf-orange-30); }
+
+.dtg-live-dot {
+    fill: var(--mf-orange);
+    stroke: var(--mf-white);
+    stroke-width: 2px;
+    opacity: 0;
+    transition: opacity 300ms var(--ease-standard);
+}
+
+.dtg-live-dot--on { opacity: 0.95; }
+
+.dtg-guides {
+    display: none;
+    fill: rgba(225, 105, 14, 0.4);
+    stroke: var(--mf-orange);
+    stroke-width: 2;
+    font: 700 14px ui-monospace, monospace;
+}
+
+.dtg-guides text { fill: var(--mf-orange); stroke: none; paint-order: stroke; stroke: rgba(0,0,0,0.5); stroke-width: 3px; }
 .dtg--guides .dtg-guides { display: block; }
