@@ -31,9 +31,10 @@
  *            &data=<json url>&poll=1000   poll a JSON feed (shape below)
  *            &demo=1   sample crews + simulated telemetry
  *            &auto=0   don't animate in on load (use L / RowingL3.show())
+ *            &layout=side   vertical column at the far right, lane 1 at the top (vmix-rowing-side.html)
  *            &guides=1 &ctrl=1 &bg=1   design aids — never on the program output
  *   JS       window.RowingL3.apply(state) · .telemetry(lane, split, rate) · .fire(lane, 'pace'|'rate')
- *            .show() · .hide()
+ *            .show() · .hide() · .layout('bottom' | 'side')
  *   message  window.postMessage({ type: 'rowing-l3', payload: state }, '*')
  *
  * State shape (every key optional):
@@ -292,7 +293,7 @@
             c.code.style.fontSize = '';
             return;
         }
-        fitText(c.code, CODE_FONT);
+        fitText(c.code, codeFont());
     }
 
     /** A lane in the draw with no crew in it (scratched, or nothing to show). */
@@ -656,6 +657,7 @@
                 paintSuit(c, data, info);
             }
         });
+        lanesEl.parentElement.style.setProperty('--rl3-n', list.length); // rail waits for the last card
         if (!state.lookup && list.some((l) => !l.empty && !blank(l.code))) loadLookup();
     }
 
@@ -762,8 +764,10 @@
         }
     }
 
-    const SPLIT_FONT = { max: 60, min: 30 }; // px: as large as the card width allows
-    const CODE_FONT = { max: 25, min: 15 };
+    // px: as large as the card allows, per layout (side cards are short rows).
+    const isSide = () => body.classList.contains('rl3--side');
+    const splitFont = () => (isSide() ? { max: 44, min: 22 } : { max: 60, min: 30 });
+    const codeFont = () => (isSide() ? { max: 24, min: 14 } : { max: 25, min: 15 });
 
     /** Pace: swipe the card up to show the split in place of the suit; holds, then swipes back down. */
     function showSplit(r, info, rules) {
@@ -809,7 +813,7 @@
     function renderSplit(c, info) {
         c.splitValue.textContent = fmtSplit(info.value);
         c.splitDelta.textContent = Number.isFinite(info.delta) ? `${fmtSigned(info.delta, 1)}s` : '';
-        fitText(c.splitValue, SPLIT_FONT);
+        fitText(c.splitValue, splitFont());
     }
 
     function resetCards() {
@@ -1089,8 +1093,15 @@
         if (m && m.type === 'rowing-l3') apply(m.payload);
     });
 
+    /** 'bottom' (lower third) or 'side' (vertical column at the far right, lane 1 on top). */
+    function setLayout(mode) {
+        body.classList.toggle('rl3--side', mode === 'side');
+        for (const r of rt.values()) if (!r.data.empty) fitCode(r.card);
+    }
+
     window.RowingL3 = {
         apply,
+        layout: setLayout,
         telemetry,
         positions: (p) => apply({ positions: p }),
         fire,
@@ -1123,6 +1134,7 @@
     if (q.get('rateOff') === '1') boot.rules.rate.enabled = false;
     apply(boot);
 
+    if (q.get('layout') === 'side') setLayout('side');
     if (q.get('guides') === '1') body.classList.add('rl3--guides');
     if (q.get('bg') === '1') body.classList.add('rl3--preview-bg');
     if (q.get('ctrl') === '1') toggleCtrl(true);

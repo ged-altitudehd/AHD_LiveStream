@@ -722,3 +722,178 @@ body.rl3-page {
     font-size: 12px;
     line-height: 1.45;
 }
+
+/* ---------- Side layout (vmix-rowing-side.html / ?layout=side / RowingL3.layout('side')) ----------
+   The same graphic as a vertical column at the far right: lane 1 (the far lane) at the top,
+   one row per lane, the race block under the lanes. Pop-ups sit to the left of a row. */
+
+.rl3--side {
+    --rl3-side-w: 340px;
+    --rl3-side-card-h: 86px;
+}
+
+.rl3--side .rl3 {
+    left: auto;
+    right: 96px;
+    top: 54px;
+    bottom: auto;
+    width: var(--rl3-side-w);
+    max-width: none;
+    max-height: 972px;
+    flex-direction: column;
+    align-items: stretch;
+}
+
+.rl3--side .rl3-main {
+    flex: 1 1 auto;
+    min-height: 0;
+    gap: 6px;
+}
+
+.rl3--side .rl3-lanes {
+    flex: 0 1 auto;
+    min-height: 0;
+    flex-direction: column;
+    height: auto;
+    gap: 6px;
+}
+
+.rl3--side .rl3-card {
+    flex: 0 1 var(--rl3-side-card-h);
+    height: var(--rl3-side-card-h);
+    min-height: 0;
+    width: auto;
+}
+
+/* Card faces become rows: [lane] [suit] [code]  /  [lane code, Pace] [split, /500m change] */
+.rl3--side .rl3-face {
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 12px 6px 8px;
+}
+
+.rl3--side .rl3-card-row { display: contents; }
+
+.rl3--side .rl3-card-lane {
+    order: -1;
+    min-width: 34px;
+    height: 34px;
+    font-size: 20px;
+}
+
+.rl3--side .rl3-card-suit {
+    flex: 0 0 64px;
+    height: 100%;
+    order: 0;
+}
+
+.rl3--side .rl3-card-code {
+    order: 1;
+    flex: 1 1 auto;
+    text-align: left;
+    padding: 0;
+}
+
+.rl3--side .rl3-card--empty .rl3-card-suit { display: none; }
+
+.rl3--side .rl3-face--back { gap: 12px; }
+
+.rl3--side .rl3-back-head {
+    flex: 0 0 auto;
+    display: grid;
+    grid-template-columns: auto auto;
+    grid-template-areas: 'lane code' 'label label';
+    align-items: center;
+    gap: 4px 6px;
+}
+
+.rl3--side .rl3-back-head .rl3-card-lane--sm { grid-area: lane; }
+.rl3--side .rl3-back-code { grid-area: code; font-size: 18px; }
+.rl3--side .rl3-back-head .rl3-metric-label { grid-area: label; justify-self: start; }
+
+.rl3--side .rl3-metric {
+    flex: 1 1 auto;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 2px;
+    min-width: 0;
+}
+
+.rl3--side .rl3-metric-value { text-align: right; }
+.rl3--side .rl3-metric-foot { width: auto; gap: 12px; }
+.rl3--side .rl3-metric-delta { font-size: 18px; }
+.rl3--side .rl3-metric-unit { font-size: 14px; }
+
+/* Pop-ups go to the left of the row: rating at the top, medal at the bottom. */
+.rl3--side .rl3-rate {
+    left: auto;
+    right: calc(100% + 8px);
+    top: 2px;
+    bottom: auto;
+    transform-origin: top right;
+    transform: translateX(10px) scale(0.9);
+}
+
+.rl3--side .rl3-medal {
+    left: auto;
+    right: calc(100% + 8px);
+    top: auto;
+    bottom: 2px;
+    transform-origin: bottom right;
+    transform: translateX(10px) scale(0.9);
+}
+
+.rl3--side .rl3-rate--on,
+.rl3--side .rl3-medal--on { transform: none; }
+
+/* Race block under the lanes: number + type, title (2 lines), gold split. */
+.rl3--side .rl3-main > .rl3-rail {
+    width: auto;
+    min-width: 0;
+    height: auto;
+    flex: 0 0 auto;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas: 'num type' 'title title' 'gold gold';
+    align-items: center;
+    gap: 6px 10px;
+    padding: 10px 14px 12px;
+    transform-origin: right center;
+}
+
+.rl3--side .rl3-rail-num { grid-area: num; border-right: 0; padding-right: 0; }
+.rl3--side .rl3-rail-type { grid-area: type; justify-self: end; font-size: 17px; padding: 5px 12px 6px; }
+
+.rl3--side .rl3-rail-title {
+    grid-area: title;
+    font-size: 24px;
+    line-height: 1.1;
+    white-space: normal;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.rl3--side .rl3-rail-gold {
+    grid-area: gold;
+    justify-self: start;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 10px;
+    padding: 4px 12px 5px;
+}
+
+.rl3--side .rl3-rail-gold-split { font-size: 28px; }
+.rl3--side .rl3-rail-gold-unit { font-size: 15px; }
+
+/* In from the right instead of up. */
+@keyframes rl3-right { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: none; } }
+
+.rl3--side.rl3--in .rl3-card { animation-name: rl3-right; }
+.rl3--side.rl3--in .rl3-rail { animation: rl3-right 450ms var(--ease-out) both; animation-delay: calc(300ms + var(--rl3-n, 9) * 40ms); }
+.rl3--side.rl3--in .rl3-rail > * { animation: none; }
+.rl3--side.rl3--out .rl3 { animation: rl3-fade-right 300ms var(--ease-standard) both; }
+
+@keyframes rl3-fade-right { to { opacity: 0; transform: translateX(24px); } }
