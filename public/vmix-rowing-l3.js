@@ -32,9 +32,15 @@
  *            &demo=1   sample crews + simulated telemetry
  *            &auto=0   don't animate in on load (use L / RowingL3.show())
  *            &layout=side   vertical column at the far right, lane 1 at the top (vmix-rowing-side.html)
+ *            &layout=bow    "bow data": a card mounted on each crew's bow number holder, sized by
+ *                           camera perspective (vmix-rowing-bow.html). Bow points come from the
+ *                           CV feed (&cv=1&streamId=…; same API as vmix-cv-leader.html) or from
+ *                           state.bows. Only crews in view get a card. Tuning: &horizon=380
+ *                           (y where cards are smallest) &near=980 (y where they are full size)
+ *                           &minScale=0.4 &bowW=300
  *            &guides=1 &ctrl=1 &bg=1   design aids — never on the program output
  *   JS       window.RowingL3.apply(state) · .telemetry(lane, split, rate) · .fire(lane, 'pace'|'rate')
- *            .show() · .hide() · .layout('bottom' | 'side')
+ *            .show() · .hide() · .layout('bottom' | 'side' | 'bow') · .bows({ lane: { x, y } })
  *   message  window.postMessage({ type: 'rowing-l3', payload: state }, '*')
  *
  * State shape (every key optional):
@@ -52,6 +58,9 @@
  *     telemetry: [ { lane, split, rate, distance, position } ],
  *     positions: { "4": 1, "2": 2, "6": 3 } | [4, 2, 6] (lanes in race order) | null,
  *     medals: true | false,                   medal pop-ups on/off (?medals=0)
+ *     bows: { "4": { x, y }, … } | [ { lane, x, y } ] | null   bow points in 1920×1080 px (bow layout);
+ *            a lane not listed has no card. From the CV feed, boats[] are matched to the crews in
+ *            lane order from the far lane (smallest y = lane 1) unless a boat carries its own lane.
  *     show: true | false
  *   }
  *   code   = RowIT club code, shown on the card; also finds the row-suit PNG in data/ahd-lookup.json
@@ -125,6 +134,8 @@
         positions: new Map(), // lane → explicit race position
         distances: new Map(), // lane → metres covered (ranked when no explicit positions)
         medals: q.get('medals') !== '0',
+        bows: new Map(), // lane → { x, y } (bow layout)
+        cvTimer: 0,
         lookup: null,
         lookupPromise: null,
         shown: false,
@@ -696,6 +707,86 @@
         }
     }
 
+    // ---------- bow data: cards mounted on the bow, sized by perspective ----------
+
+    const BOW = {
+        horizon: numParam('horizon', 380), // y where a bow is furthest away → smallest card
+        near: numParam('near', 980),       // y where a bow is nearest → full-size card
+        minScale: Math.max(0.15, Math.min(1, numParam('minScale', 0.4))),
+        stem: 22,                          // post from the card down to the bow point (px, unscaled)
+    };
+
+    function perspectiveScale(y) {
+        const t = (y - BOW.horizon) / Math.max(1, BOW.near - BOW.horizon);
+        return BOW.minScale + (1 - BOW.minScale) * Math.max(0, Math.min(1, t));
+    }
+
+    /** bows input: { lane: { x, y } } | [ { lane, x, y } ] | null. */
+    function setBows(b) {
+        state.bows = new Map();
+        const list = Array.isArray(b) ? b : b && typeof b === 'object' ? Object.entries(b).map(([lane, v]) => ({ lane, ...v })) : [];
+        for (const e of list) {
+            const lane = Number(e?.lane);
+            const x = Number(e?.x);
+            const y = Number(e?.y);
+            if (Number.isInteger(lane) && Number.isFinite(x) && Number.isFinite(y)) state.bows.set(lane, { x, y });
+        }
+    }
+
+    function renderBows() {
+        if (!body.classList.contains('rl3--bow')) return;
+        for (const [lane, r] of rt) {
+            const c = r.card;
+            const b = r.data.empty ? null : state.bows.get(lane);
+            const inView = !!b && b.x > -200 && b.x < 2120 && b.y > -100 && b.y < 1180;
+            c.root.classList.toggle('rl3-card--bow-on', inView);
+            if (!b) continue;
+            const s = perspectiveScale(b.y);
+            c.root.style.setProperty('--s', s.toFixed(3));
+            c.root.style.left = `${b.x.toFixed(1)}px`;
+            c.root.style.top = `${(b.y - BOW.stem * s).toFixed(1)}px`;
+        }
+    }
+
+    /** CV feed (api/cv-position): boats[] {slot, x, y, laneCoord, lane?} in refW×refH → bows per lane. */
+    function bowsFromCv(data) {
+        if (!data || data.stale || !Array.isArray(data.boats)) return {};
+        const refW = Number(data.refW) || 1280;
+        const refH = Number(data.refH) || 720;
+        const off = data.offset || (String(data.venue).toLowerCase() === 'twizel' ? { x: -140, y: -50 } : { x: 140, y: -50 });
+        const toPx = (x, y) => ({ x: ((Number(x) + off.x) * 1920) / refW, y: ((Number(y) + off.y) * 1080) / refH });
+        const crews = laneList().filter((l) => !l.empty).map((l) => l.lane); // lane order = far → near
+        const boats = data.boats.filter((bt) => Number.isFinite(Number(bt.x)) && Number.isFinite(Number(bt.y)));
+        const out = {};
+        const unassigned = [];
+        for (const bt of boats) {
+            if (Number.isInteger(Number(bt.lane))) out[Number(bt.lane)] = toPx(bt.x, bt.y);
+            else unassigned.push(bt);
+        }
+        // No lane from the CV: far lane (smallest y) first, matched to the crews in lane order.
+        unassigned.sort((a, b2) => (a.laneCoord ?? a.y) - (b2.laneCoord ?? b2.y));
+        const free = crews.filter((l) => !(l in out));
+        unassigned.forEach((bt, i) => {
+            if (free[i] != null) out[free[i]] = toPx(bt.x, bt.y);
+        });
+        return out;
+    }
+
+    function startCvPoll(streamId, ms) {
+        const api = (q.get('api') || '').replace(/\/$/, '');
+        const tick = async () => {
+            try {
+                const res = await fetch(`${api}/api/cv-position?streamId=${encodeURIComponent(streamId)}`, { cache: 'no-store' });
+                const data = res.ok ? await res.json() : null;
+                apply({ bows: bowsFromCv(data) });
+            } catch {
+                apply({ bows: {} });
+            }
+            state.cvTimer = setTimeout(tick, ms);
+        };
+        tick();
+    }
+
     /** positions input: { lane: pos } | [lane, lane, …] in race order | null. */
     function setPositions(p) {
         state.positions = new Map();
@@ -875,9 +966,11 @@
         if ('positions' in input) setPositions(input.positions);
         if (Array.isArray(input.telemetry)) takeRaceData(input.telemetry);
         if (typeof input.medals === 'boolean') state.medals = input.medals;
+        if ('bows' in input) setBows(input.bows);
         renderRace();
         renderLanes();
         renderMedals();
+        renderBows();
         syncCtrl();
         if (Array.isArray(input.lanes)) {
             const byLane = new Map(state.lanes.map((l) => [l.lane, l])); // last row per lane, as shown
@@ -925,6 +1018,7 @@
                 rate: 33 + Math.random() * 3,
                 pushAt: now() + 4 + Math.random() * 20,
                 dist: 0,
+                bowX: 1750 + Math.random() * 300, // demo bow sweep, right → left
             });
         }
         // Push envelope: ramp 3 s, hold 5 s, ease back over 10 s.
@@ -942,6 +1036,20 @@
                 telemetry(lane, split, rate, t);
             }
             renderMedals();
+            if (body.classList.contains('rl3--bow')) {
+                // Lanes as rows down the frame (lane 1 far), bows sweeping right → left.
+                const crews = laneList().filter((l) => !l.empty).map((l) => l.lane);
+                const bows = {};
+                for (const [lane, s] of sim) {
+                    const i = crews.indexOf(lane);
+                    if (i < 0) continue;
+                    const y = BOW.horizon + 40 + ((BOW.near - BOW.horizon - 40) * i) / Math.max(1, crews.length - 1);
+                    s.bowX -= 0.5 * (80 + 55 * (y - BOW.horizon) / (BOW.near - BOW.horizon)) / 4;
+                    if (s.bowX < -150) s.bowX = 2050;
+                    bows[lane] = { x: s.bowX, y };
+                }
+                apply({ bows });
+            }
         };
         state.demoTimer = setInterval(step, 500);
     }
@@ -1093,15 +1201,19 @@
         if (m && m.type === 'rowing-l3') apply(m.payload);
     });
 
-    /** 'bottom' (lower third) or 'side' (vertical column at the far right, lane 1 on top). */
+    /** 'bottom' (lower third), 'side' (vertical column at the far right, lane 1 on top)
+     *  or 'bow' (side-style cards mounted on each bow, sized by perspective). */
     function setLayout(mode) {
-        body.classList.toggle('rl3--side', mode === 'side');
+        body.classList.toggle('rl3--side', mode === 'side' || mode === 'bow');
+        body.classList.toggle('rl3--bow', mode === 'bow');
         for (const r of rt.values()) if (!r.data.empty) fitCode(r.card);
+        renderBows();
     }
 
     window.RowingL3 = {
         apply,
         layout: setLayout,
+        bows: (b) => apply({ bows: b }),
         telemetry,
         positions: (p) => apply({ positions: p }),
         fire,
@@ -1134,7 +1246,11 @@
     if (q.get('rateOff') === '1') boot.rules.rate.enabled = false;
     apply(boot);
 
-    if (q.get('layout') === 'side') setLayout('side');
+    if (q.get('layout') === 'side' || q.get('layout') === 'bow') setLayout(q.get('layout'));
+    if (q.get('cv') === '1' || q.get('streamId')) {
+        const id = q.get('streamId') || 'kri-live';
+        startCvPoll(id, Math.max(100, numParam('cvPoll', 200)));
+    }
     if (q.get('guides') === '1') body.classList.add('rl3--guides');
     if (q.get('bg') === '1') body.classList.add('rl3--preview-bg');
     if (q.get('ctrl') === '1') toggleCtrl(true);

@@ -897,3 +897,97 @@ body.rl3-page {
 .rl3--side.rl3--out .rl3 { animation: rl3-fade-right 300ms var(--ease-standard) both; }
 
 @keyframes rl3-fade-right { to { opacity: 0; transform: translateX(24px); } }
+
+/* ---------- Bow data (vmix-rowing-bow.html / ?layout=bow) ----------
+   Side-style row cards, each mounted on a crew's bow number holder at the point the CV
+   reports, and scaled by camera perspective (far lane small, near lane full size). The body
+   carries rl3--side as well, so the card faces come from the side layout above. */
+
+.rl3--bow {
+    --rl3-bow-w: 300px;
+    --rl3-bow-h: 78px;
+}
+
+.rl3--bow .rl3 {
+    inset: 0;
+    width: auto;
+    max-height: none;
+    display: block;
+}
+
+.rl3--bow .rl3-main { display: block; height: 100%; }
+.rl3--bow .rl3-lanes { display: block; height: 100%; }
+.rl3--bow .rl3-main > .rl3-rail { display: none; }
+
+/* left/top = the bow point; the card hangs above it on a short post and scales from there. */
+.rl3--bow .rl3-card {
+    position: absolute;
+    width: var(--rl3-bow-w);
+    height: var(--rl3-bow-h);
+    left: -9999px;
+    top: -9999px;
+    transform: translate(-50%, -100%) scale(var(--s, 1));
+    transform-origin: bottom center;
+    opacity: 0;
+    transition: opacity 250ms var(--ease-standard), left 220ms linear, top 220ms linear, transform 220ms linear;
+    will-change: left, top, transform;
+}
+
+.rl3--bow .rl3-card--bow-on { opacity: 1; }
+.rl3--bow.rl3--in .rl3-card { animation: none; }
+.rl3--bow .rl3-card--empty { display: none; }
+
+/* Mounting post down to the bow, and a small foot on the number holder. */
+.rl3--bow .rl3-card::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 100%;
+    width: 4px;
+    height: 22px;
+    margin-left: -2px;
+    background: linear-gradient(180deg, var(--mf-surface) 0%, rgba(48, 60, 66, 0.55) 100%);
+    border-radius: 0 0 2px 2px;
+}
+
+.rl3--bow .rl3-card::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: calc(100% + 18px);
+    width: 14px;
+    height: 8px;
+    margin-left: -7px;
+    border-radius: 50%;
+    background: rgba(48, 60, 66, 0.75);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35);
+}
+
+.rl3--bow .rl3-face { padding: 5px 10px 5px 7px; gap: 8px; }
+.rl3--bow .rl3-card-suit { flex-basis: 56px; }
+.rl3--bow .rl3-card-lane { min-width: 30px; height: 30px; font-size: 18px; }
+
+/* Pop-ups above the card instead of beside it (a boat's bow is open water either side). */
+.rl3--bow .rl3-rate { right: auto; left: 0; top: auto; bottom: calc(100% + 6px); transform-origin: bottom left; }
+.rl3--bow .rl3-medal { right: 0; left: auto; top: auto; bottom: calc(100% + 6px); transform-origin: bottom right; }
+.rl3--bow .rl3-rate:not(.rl3-rate--on) { transform: translateY(8px) scale(0.9); }
+.rl3--bow .rl3-medal:not(.rl3-medal--on) { transform: translateY(8px) scale(0.9); }
+
+/* Guides: the horizon / near lines the perspective is set between. */
+.rl3--bow.rl3--guides .rl3-safe::before,
+.rl3--bow.rl3--guides .rl3-safe::after {
+    content: 'horizon (smallest cards)';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(380px - 54px);
+    border-top: 1px dashed var(--mf-orange);
+    font: 700 11px ui-monospace, monospace;
+    color: var(--mf-orange);
+    padding: 2px 4px;
+}
+
+.rl3--bow.rl3--guides .rl3-safe::after {
+    content: 'near (full-size cards)';
+    top: calc(980px - 54px);
+}
