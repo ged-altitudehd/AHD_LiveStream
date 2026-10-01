@@ -1,16 +1,17 @@
 /**
- * Distance to go — the row of course buoys (10 m apart) as a countdown to the finish.
- * A translucent strip lies on the water along the buoy row and each buoy carries the metres
- * to go at that buoy, in white, lying on the water; the lead crew's live count rides along
- * the row as they pass the buoys. 1920×1080, transparent.
+ * Distance to go — the rows of course buoys as a countdown to the finish.
+ * Each row of buoys runs across the course at a distance mark, and the rows are 10 m apart
+ * down the course. The graphic lays a translucent band on the water along each row in view
+ * with that row's metres to go in white at its near end ("80m", the next row "70m"), and the
+ * lead crew's live count moves between the rows as they race. 1920×1080, transparent.
  *
  * Placement (screen px, set once for the camera; ?guides=1 draws the fit):
- *   Two or three buoys whose distance to go is known, given as x,y,metres:
- *     ?b1=1860,680,50   ?b2=1300,540,0   [?b3=1565,610,20]
- *   Two buoys give a linear fit; a third lets the spacing shrink with distance the way the
- *   camera sees it (perspective). ?range=0,80 draws buoys from 0 to 80 m to go along the
- *   fitted line, every ?step=10 m (the buoy interval). ?w=90 strip width at the nearest buoy.
- *   ?every=1 labels every buoy (2 = every second buoy, useful for a long stretch).
+ *   Each known row as near-x,near-y,far-x,far-y,metres — the near end is the buoy closest to
+ *   the camera, the far end the last buoy of that row you can see:
+ *     ?r1=560,860,605,620,80   ?r2=1862,681,1305,540,90   [?r3=…]
+ *   Two rows fix the course direction; a third lets the row spacing shrink with distance the
+ *   way the camera sees it. ?rows=60,70,80,90 draws these rows (default: every ?step=10 m
+ *   from the nearest to the furthest known row). ?w=60 band width at the nearest row.
  *
  * Distance (any mix):
  *   ?dist=2000                 course length (default 2000)
@@ -18,7 +19,7 @@
  *   JS   window.RowingDtg.set(metresToGo) · .leader(metresCovered) · .show() · .hide() · .demo(on)
  *   msg  postMessage({ type: 'rowing-dtg', payload: { dtg | distance | distances: { lane: m } } })
  *   Between updates the count runs on at the leader's measured speed, so it ticks metre by metre.
- *   ?demo=1 runs a 2000 m race. ?opacity=0.35 strip opacity · ?text=0.92 text opacity.
+ *   ?demo=1 runs the last 160 m of a race. ?opacity=0.35 band opacity · ?text=0.92 text opacity.
  *
  * Keys: L in · O out · D demo · G guides · B preview backdrop.
  */
@@ -30,77 +31,72 @@
     const svg = document.getElementById('dtgSvg');
     const NS = 'http://www.w3.org/2000/svg';
 
-    const refs = [list('b1', [1862, 681, 40]), list('b2', [1305, 540, 0]), q.get('b3') ? list('b3', null) : [1565, 610, 20]]
-        .filter((r) => r && r.length === 3 && r.every(Number.isFinite))
-        .map(([x, y, d]) => ({ x, y, d }));
+    const refs = [list('r1', [560, 860, 605, 620, 80]), list('r2', [1862, 681, 1305, 540, 90]), list('r3', null), list('r4', null)]
+        .filter((r) => r && r.length === 5 && r.every(Number.isFinite))
+        .map(([nx, ny, fx, fy, d]) => ({ near: { x: nx, y: ny }, far: { x: fx, y: fy }, d }));
     const cfg = {
         course: num('dist', 2000),
-        range: list('range', [0, 60]),
         step: Math.max(1, num('step', 10)),
-        every: Math.max(1, Math.round(num('every', 1))),
-        w: num('w', 90),
+        rows: list('rows', null),
+        w: num('w', 60),
     };
 
     const st = { target: null, shown: null, speed: 0, lastT: 0, on: false, demo: 0, raf: 0 };
 
-    // ---------- buoy row: metres to go → screen point ----------
-    // Along the row, screen position is a projective (1-D homography) function of distance:
-    // t(d) = (a·d + b) / (c·d + 1). Three references fix a, b, c; two give the linear case.
+    // ---------- rows: metres to go → the row's line on screen ----------
+    // The near ends of the rows lie on one line down the course, the far ends on another. Along
+    // each, position is a projective function of distance: t(d) = (a·d + b) / (c·d + 1). Three
+    // rows fix a, b, c; two give the linear case.
 
-    const near = refs.reduce((m, r) => (m.d > r.d ? m : r)); // the buoy with most metres to go = start of the ruler
-    const far = refs.reduce((m, r) => (m.d < r.d ? m : r));
-    const axis = { x: far.x - near.x, y: far.y - near.y };
-    const axisLen = Math.hypot(axis.x, axis.y) || 1;
-    const tOf = (p) => ((p.x - near.x) * axis.x + (p.y - near.y) * axis.y) / (axisLen * axisLen); // 0 at near, 1 at far
-
-    let tFn;
-    {
-        const pts = refs.map((r) => ({ d: r.d, t: tOf(r) }));
-        if (pts.length >= 3) {
-            // Solve t(c·d + 1) = a·d + b for the three points.
-            const [p0, p1, p2] = pts;
-            const M = [
-                [p0.d, 1, -p0.t * p0.d],
-                [p1.d, 1, -p1.t * p1.d],
-                [p2.d, 1, -p2.t * p2.d],
-            ];
+    function fit1d(points) {
+        // points: [{ d, t }]
+        if (points.length >= 3) {
+            const [p0, p1, p2] = points;
+            const M = [[p0.d, 1, -p0.t * p0.d], [p1.d, 1, -p1.t * p1.d], [p2.d, 1, -p2.t * p2.d]];
             const v = [p0.t, p1.t, p2.t];
             const det = (m) => m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
             const D = det(M);
             const col = (i) => M.map((row, r) => row.map((val, c) => (c === i ? v[r] : val)));
             if (Math.abs(D) > 1e-9) {
-                const a = det(col(0)) / D;
-                const b = det(col(1)) / D;
-                const c = det(col(2)) / D;
-                tFn = (d) => (a * d + b) / (c * d + 1);
+                const a = det(col(0)) / D, b = det(col(1)) / D, c = det(col(2)) / D;
+                return (d) => (a * d + b) / (c * d + 1);
             }
         }
-        if (!tFn) {
-            const dd = far.d - near.d || 1;
-            tFn = (d) => (d - near.d) / dd;
-        }
+        const [p0, p1] = points;
+        const dd = p1.d - p0.d || 1;
+        return (d) => p0.t + ((d - p0.d) * (p1.t - p0.t)) / dd;
     }
 
-    const pointAt = (d) => {
-        const t = tFn(d);
-        return { x: near.x + axis.x * t, y: near.y + axis.y * t, t };
-    };
-    /** Local screen scale at a buoy: how far apart neighbouring buoys are there (px per step). */
-    const spacingAt = (d) => {
-        const a = pointAt(d);
-        const b = pointAt(d - cfg.step);
-        return Math.hypot(b.x - a.x, b.y - a.y);
-    };
-    const nearSpacing = spacingAt(near.d);
-    // Perpendicular to the row, pointing down-screen (toward the camera) so labels sit this side.
-    let px = -axis.y / axisLen;
-    let py = axis.x / axisLen;
-    if (py < 0) { px = -px; py = -py; }
-    // Text runs along the row but always reads left → right (never upside down).
-    let angle = (Math.atan2(axis.y, axis.x) * 180) / Math.PI;
-    if (angle > 90) angle -= 180;
-    if (angle < -90) angle += 180;
-    const clampS = (s) => Math.max(0.45, Math.min(1.6, s));
+    /** A line through the matching ends of the known rows, parameterised by metres to go. */
+    function endLine(key) {
+        const first = refs.reduce((m, r) => (m.d < r.d ? m : r)); // nearest to the finish
+        const last = refs.reduce((m, r) => (m.d > r.d ? m : r));
+        const A = first[key];
+        const B = last[key];
+        const ax = B.x - A.x, ay = B.y - A.y;
+        const len2 = ax * ax + ay * ay || 1;
+        const tOf = (p) => ((p.x - A.x) * ax + (p.y - A.y) * ay) / len2;
+        const tFn = fit1d(refs.map((r) => ({ d: r.d, t: tOf(r[key]) })));
+        return (d) => {
+            const t = tFn(d);
+            return { x: A.x + ax * t, y: A.y + ay * t };
+        };
+    }
+
+    const nearAt = endLine('near');
+    const farAt = endLine('far');
+    const rowAt = (d) => ({ near: nearAt(d), far: farAt(d) });
+    // Size by how close a row's near end is to the camera (lower on screen = nearer).
+    const nearestY = Math.max(...refs.map((r) => r.near.y));
+    const scaleAt = (d) => Math.max(0.35, Math.min(1.6, Math.pow(Math.max(1, nearAt(d).y) / nearestY, 1.5)));
+
+    function rowsToDraw() {
+        if (cfg.rows) return cfg.rows.filter(Number.isFinite);
+        const ds = refs.map((r) => r.d);
+        const out = [];
+        for (let d = Math.min(...ds); d <= Math.max(...ds) + 1e-6; d += cfg.step) out.push(d);
+        return out;
+    }
 
     // ---------- drawing ----------
 
@@ -111,13 +107,9 @@
         return n;
     }
 
-    /** Text lying on the water: rotated along the row, squashed toward the camera, sized by local spacing. */
-    function flatText(p, d, s, cls, text) {
-        const squash = 0.55; // the water plane seen at a low angle
-        return el('text', {
-            class: cls,
-            transform: `translate(${p.x} ${p.y}) rotate(${angle}) scale(${s} ${s * squash})`,
-        }, text);
+    /** Text lying on the water below a point: squashed toward the camera, sized by local scale. */
+    function flatText(p, s, cls, text) {
+        return el('text', { class: cls, transform: `translate(${p.x} ${p.y}) scale(${s} ${s * 0.6})` }, text);
     }
 
     let liveLabel = null;
@@ -125,62 +117,53 @@
 
     function draw() {
         svg.replaceChildren();
-        const [d0, d1] = cfg.range;
-        const lo = Math.min(d0, d1);
-        const hi = Math.max(d0, d1);
-
-        // Strip along the row, width shrinking with distance.
-        const left = [];
-        const right = [];
-        for (let d = lo; d <= hi + 1e-6; d += cfg.step / 2) {
-            const p = pointAt(d);
-            const w = cfg.w * clampS(spacingAt(d) / nearSpacing);
-            left.push(`${p.x - px * w * 0.35},${p.y - py * w * 0.35}`);
-            right.unshift(`${p.x + px * w * 0.65},${p.y + py * w * 0.65}`);
+        for (const d of rowsToDraw()) {
+            const r = rowAt(d);
+            const s = scaleAt(d);
+            // Band along the row, wider at the near end.
+            const dx = r.far.x - r.near.x, dy = r.far.y - r.near.y;
+            const L = Math.hypot(dx, dy) || 1;
+            const px = -dy / L, py = dx / L;
+            const wn = cfg.w * s, wf = wn * 0.45;
+            svg.appendChild(el('polygon', {
+                class: 'dtg-band',
+                points: [
+                    `${r.near.x - px * wn / 2},${r.near.y - py * wn / 2}`, `${r.far.x - px * wf / 2},${r.far.y - py * wf / 2}`,
+                    `${r.far.x + px * wf / 2},${r.far.y + py * wf / 2}`, `${r.near.x + px * wn / 2},${r.near.y + py * wn / 2}`,
+                ].join(' '),
+            }));
+            // The row's distance, on the water just below its near end.
+            svg.appendChild(flatText({ x: r.near.x, y: r.near.y + 16 * s }, s, 'dtg-mark', d === 0 ? 'FINISH' : `${d}m`));
         }
-        svg.appendChild(el('polygon', { class: 'dtg-band', points: [...left, ...right].join(' ') }));
-
-        // Buoy marks and metres-to-go labels.
-        let i = 0;
-        for (let d = lo; d <= hi + 1e-6; d += cfg.step, i++) {
-            const p = pointAt(d);
-            const s = clampS(spacingAt(d) / nearSpacing);
-            svg.appendChild(el('circle', { class: 'dtg-tick', cx: p.x, cy: p.y, r: Math.max(2, 4 * s) }));
-            if (i % cfg.every) continue;
-            const lp = { x: p.x + px * 14 * s, y: p.y + py * 14 * s };
-            svg.appendChild(flatText(lp, d, s, 'dtg-mark', d === 0 ? 'FINISH' : String(d)));
-        }
-
-        // The lead crew's live count: rides the row while in range, else parks at the row's start.
         liveDot = svg.appendChild(el('circle', { class: 'dtg-live-dot', r: 7 }));
-        liveLabel = svg.appendChild(flatText({ x: 0, y: 0 }, 0, 1, 'dtg-live', ''));
+        liveLabel = svg.appendChild(flatText({ x: 0, y: 0 }, 1, 'dtg-live', ''));
 
-        // Guides: the reference buoys and their distances.
         const g = el('g', { class: 'dtg-guides' });
         for (const r of refs) {
-            g.appendChild(el('circle', { cx: r.x, cy: r.y, r: 9 }));
-            g.appendChild(el('text', { x: r.x + 12, y: r.y - 12 }, `${r.d} m to go (${r.x},${r.y})`));
+            g.appendChild(el('line', { x1: r.near.x, y1: r.near.y, x2: r.far.x, y2: r.far.y }));
+            g.appendChild(el('circle', { cx: r.near.x, cy: r.near.y, r: 9 }));
+            g.appendChild(el('circle', { cx: r.far.x, cy: r.far.y, r: 6 }));
+            g.appendChild(el('text', { x: r.near.x + 14, y: r.near.y + 6 }, `${r.d} m row · near (${r.near.x},${r.near.y}) far (${r.far.x},${r.far.y})`));
         }
-        g.appendChild(el('line', { x1: pointAt(lo).x, y1: pointAt(lo).y, x2: pointAt(hi).x, y2: pointAt(hi).y }));
         svg.appendChild(g);
     }
 
+    /** The lead crew's live count: moves along the near-end line between the rows. */
     function placeLive(dtg) {
-        const [d0, d1] = cfg.range;
-        const lo = Math.min(d0, d1);
-        const hi = Math.max(d0, d1);
-        const inRange = dtg >= lo && dtg <= hi;
-        const d = inRange ? dtg : hi;
-        const p = pointAt(d);
-        const s = clampS(spacingAt(d) / nearSpacing);
+        const ds = rowsToDraw();
+        const lo = Math.min(...ds), hi = Math.max(...ds);
+        const inRange = dtg >= lo - cfg.step && dtg <= hi + cfg.step;
+        const d = Math.max(lo - cfg.step, Math.min(hi + cfg.step, dtg));
+        const p = nearAt(d);
+        const s = scaleAt(d);
         liveDot.setAttribute('cx', p.x);
         liveDot.setAttribute('cy', p.y);
         liveDot.setAttribute('r', Math.max(4, 7 * s));
         liveDot.classList.toggle('dtg-live-dot--on', inRange);
-        const lp = { x: p.x - px * 30 * s, y: p.y - py * 30 * s }; // the far side of the row, clear of the buoy labels
-        liveLabel.setAttribute('transform', `translate(${lp.x} ${lp.y}) rotate(${angle}) scale(${s} ${s * 0.55})`);
+        liveLabel.setAttribute('transform', `translate(${p.x} ${p.y - 26 * s}) scale(${s} ${s * 0.6})`);
         liveLabel.textContent = `${Math.ceil(dtg).toLocaleString('en-NZ')} m to go`;
         liveLabel.classList.toggle('dtg-live--finish', dtg <= 100);
+        liveLabel.classList.toggle('dtg-live--parked', !inRange);
     }
 
     // ---------- distance ----------
@@ -250,9 +233,9 @@
         clearInterval(st.demo);
         st.demo = 0;
         if (on === false) return;
-        // Start with 140 m to go so the count reaches the buoys in view within seconds.
+        // Start with 160 m to go so the count reaches the rows in view within seconds.
         const t0 = performance.now();
-        const startCovered = Math.max(0, cfg.course - 140);
+        const startCovered = Math.max(0, cfg.course - 160);
         st.demo = setInterval(() => {
             const t = (performance.now() - t0) / 1000;
             const covered = Math.min(cfg.course, startCovered + t * (5.4 + 0.3 * Math.sin(t / 7)));

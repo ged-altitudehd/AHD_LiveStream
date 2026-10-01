@@ -1033,7 +1033,8 @@ body.rl3-page {
     stroke-width: 1.5px;
 }
 
-.dtg-mark { font-size: 34px; letter-spacing: -0.02em; }
+.dtg-mark { font-size: 46px; letter-spacing: -0.03em; }
+.dtg-live--parked { fill-opacity: 0.6; }
 
 .dtg-live {
     font-size: 40px;
