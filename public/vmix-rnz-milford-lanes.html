@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1920, height=1080, initial-scale=1">
+    <title>vMix — RNZ Milford lane cards</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@600;700&family=Montserrat:wght@500;600;700;800&display=swap">
+    <link rel="stylesheet" href="vmix-graphics.css?v=26">
+    <link rel="stylesheet" href="vmix-layout-editor.css">
+</head>
+<!--
+    Milford lane cards + docked lower third (handoff: “Lower third with vertical”).
+    Same stage, keys and triggers as vmix-rnz-milford.html — this page defaults to g=e.
+    ?g=e&autoplay=1           play in on load
+    &demo=1                   run the reference sequence (in → move → 8 s hold → close → 5 s → out)
+    &openLane=4&moveLevel=3   demo move lane / chevron count
+    Live timing: MilfordLaneCards.feed / setState, 'altitudehd:lanecards' event,
+    localStorage altitudeHdLaneCards_v1, or postMessage {type:'altitudehd:lanecards'}.
+-->
+<body class="vmix-page" data-vmix-theme="rnz-milford" data-vmix-default-graphic="e">
+    <div class="vg-stage">
+        <div class="vg-bg" id="vgBg" aria-hidden="true"></div>
+        <div class="vg-map-wrap" id="vgMapWrap">
+            <iframe class="vg-map-frame" id="vgMapFrame" title="Altitude HD speed overlay"></iframe>
+        </div>
+        <div class="vg-layer" id="vgLayer"></div>
+        <p class="vg-error" id="vgError" hidden></p>
+    </div>
+    <script src="hub-csv.js"></script>
+    <script src="regatta-csv-archive.js?v=4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <script src="vmix-layout.js?v=25"></script>
+    <script src="vmix-gt-import.js"></script>
+    <script src="vmix-rnz-milford-lanes.js?v=1"></script>
+    <script src="vmix-graphics.js?v=32"></script>
+    <script src="vmix-layout-editor.js"></script>
+</body>
+</html>

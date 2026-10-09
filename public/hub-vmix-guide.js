@@ -34,6 +34,7 @@ const VMIX_TRIGGERS = [
     { key: 'v', graphic: 'Speed chart', desc: 'KRI only — lower-third speed vs distance replay in real time (~7 min demo); ease in/out; add &loop=1 to repeat' },
     { key: 'k', graphic: 'Live tracking', desc: 'KRI only — bottom-right crew positions from demo data (rank, logo, club code, gap); leader distance to go; o to fade out' },
     { key: 'm', graphic: 'Weather map', desc: 'KRI and Karāpiro packs — full-screen Lake Karāpiro live weather (wind, temp, rain, 3 hr forecast); o to fade out' },
+    { key: 'e', graphic: 'Lane cards', desc: 'Milford only — 8 lane cards (rowsuit, crew, lane) on the right + lower third docked to the Milford logo; a card opens 8 s on a move (split /500m, rating, chevrons), bolt at each 500 m for crews under Gold Standard · 1–8 open a card, 0 close, b bolt · n/p change race · o to fall out · add &demo=1 for the reference sequence (also vmix-rnz-milford-lanes.html)' },
     { key: 'c', graphic: 'Clear', desc: 'Instant clear — idle, ready for any graphic' },
     { key: 'n', graphic: 'Next race', desc: 'Live race number +1 on daysheet (updates draw/LT/results on air)' },
     { key: 'p', graphic: 'Previous race', desc: 'Live race number −1 on daysheet (updates draw/LT/results on air)' },
