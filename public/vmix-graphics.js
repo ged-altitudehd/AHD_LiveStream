@@ -1,6 +1,6 @@
 /**
  * vMix broadcast graphics — title, lower third, draw, results, leader, tracker.
- * Keys: d/l/r/t = play in · w = leader · x = CV leader (KRI/Karāpiro) · h = CV draw boats · u = course underlay · s = schedule · v = speed chart · k = live tracking · m = weather · g = tracker (Milford) · 1–8 = leader lane · n/p = next/prev race · o = out · c = clear.
+ * Keys: d/l/r/t = play in · w = leader · x = CV leader (KRI/Karāpiro) · h = CV draw boats · u = course underlay · s = schedule · v = speed chart · k = live tracking · m = weather · g = tracker (Milford) · e = lane cards (Milford) · 1–8 = leader lane (lane cards: open card, 0 close, b bolt) · n/p = next/prev race · o = out · c = clear.
  * URL: ?g=d  &race=1  &regatta=nzmm2026  (&autoplay=1 to run in on load)
  */
 const VG_GRAPHIC_ALIASES = {
@@ -55,6 +55,10 @@ const VG_GRAPHIC_ALIASES = {
     previousrace: 'prev',
     prev: 'prev',
     tracker: 'tracker',
+    e: 'lanes',
+    lanes: 'lanes',
+    lanecards: 'lanes',
+    lanecard: 'lanes',
 };
 
 /** Theme-aware shortcut → graphic (KRI / Karāpiro schedule on s). */
@@ -816,6 +820,10 @@ function vgRefreshLiveRaceContent() {
         window.KriVmixCourseScroll?.updateRaceContext?.(vgBuildSpeedChartRaceContext());
         return;
     }
+    if (vgIsLanesGraphic(graphic)) {
+        window.MilfordLaneCards?.updateRace?.(vgBuildLaneCardsContext());
+        return;
+    }
 
     const profile = vgGetVideoProfile(graphic);
     const layer = vgGetLayerEl();
@@ -965,7 +973,10 @@ function vgEnableBrowserPreview() {
         if (e.target.closest('.vg-layout-panel, .kp-ops, input, textarea, select, a, button, [data-kp-festive]')) {
             return;
         }
-        const raw = new URLSearchParams(location.search).get('g') || 'l';
+        const raw =
+            new URLSearchParams(location.search).get('g') ||
+            document.body?.dataset?.vmixDefaultGraphic ||
+            'l';
         const graphic = vgResolveGraphicAlias(raw);
         if (!graphic) return;
         if (vgPlayback.state !== 'idle') vgTriggerClear();
@@ -1014,6 +1025,45 @@ function vgIsScheduleGraphic(graphic) {
 
 function vgIsWeatherGraphic(graphic) {
     return graphic === 'weather';
+}
+
+/** Milford lane cards + docked lower third (vmix-rnz-milford-lanes.js). */
+function vgIsLanesGraphic(graphic) {
+    return graphic === 'lanes';
+}
+
+function vgLanesEnabled() {
+    return vgIsMilfordTheme() && !!window.MilfordLaneCards;
+}
+
+/** Daysheet draw → lane-card crews (names, club ids, logos) + lower-third text. */
+function vgBuildLaneCardsContext(raceParam) {
+    const race = vgFindRace(raceParam ?? vgGetRaceParam());
+    if (!race) return null;
+    const lanes = (race.lanes || [])
+        .filter((entry) => entry.code)
+        .sort((a, b) => a.lane - b.lane)
+        .map((entry) => {
+            const club = vgParseClubCode(entry.code);
+            const info = vgClubInfo(club.id, vgState.lookup);
+            return {
+                lane: entry.lane,
+                code: String(entry.code || '').trim(),
+                clubId: club.id || '',
+                crewNum: club.crewNum || '',
+                name: info.name || club.id.toUpperCase(),
+                logoUrl: info.logoUrl,
+            };
+        });
+    return {
+        race: race.race,
+        raceNum: race.raceNum,
+        event: vgExpandEventName(race.eventType, vgState.lookup),
+        round: race.round || '',
+        division: race.division || '',
+        progression: race.progression || '',
+        lanes,
+    };
 }
 
 /** KRI / Karāpiro graphics use CSS panels (no PNG/WebM backgrounds). */
@@ -1208,6 +1258,55 @@ async function vgStartCvLeaderOutro() {
         if (window.KriVmixCvLeader) await window.KriVmixCvLeader.hide();
     } finally {
         vgResetToIdle();
+    }
+}
+
+async function vgStartLanesIntro() {
+    vgShowBackground(false);
+    vgShowTextLayer(false);
+    vgHideMap();
+    const layer = vgGetLayerEl();
+    if (layer) {
+        layer.replaceChildren();
+        layer.className = 'vg-layer';
+    }
+    try {
+        if (!window.MilfordLaneCards) {
+            throw new Error('Lane cards module not loaded');
+        }
+        const err = document.getElementById('vgError');
+        if (err) err.hidden = true;
+        const holdTimer = setTimeout(() => {
+            if (vgPlayback.state === 'intro' && vgIsLanesGraphic(vgPlayback.graphic)) {
+                vgSetStageState('hold');
+            }
+        }, window.MilfordLaneCards.INTRO_MS);
+        vgPlayback.profileTimers.push(holdTimer);
+
+        await window.MilfordLaneCards.show({
+            race: vgBuildLaneCardsContext(),
+        });
+        if (!vgIsLanesGraphic(vgPlayback.graphic)) return;
+        vgSetStageState('hold');
+    } catch (e) {
+        const err = document.getElementById('vgError');
+        if (err) {
+            err.hidden = false;
+            err.textContent = e instanceof Error ? e.message : 'Lane cards failed';
+        }
+        vgResetToIdle();
+    }
+}
+
+async function vgStartLanesOutro() {
+    if (!vgIsLanesGraphic(vgPlayback.graphic)) return;
+    if (vgPlayback.state !== 'hold' && vgPlayback.state !== 'intro') return;
+    vgClearPlaybackTimers();
+    vgSetStageState('outro');
+    try {
+        if (window.MilfordLaneCards) await window.MilfordLaneCards.hide();
+    } finally {
+        if (vgIsLanesGraphic(vgPlayback.graphic)) vgResetToIdle();
     }
 }
 
@@ -2208,6 +2307,7 @@ function vgResetToIdle() {
     if (window.KriVmixLiveTracking) window.KriVmixLiveTracking.remove();
     if (window.KriVmixWeather) window.KriVmixWeather.remove();
     if (window.KriVmixCourseScroll) window.KriVmixCourseScroll.remove();
+    if (window.MilfordLaneCards) window.MilfordLaneCards.remove();
     vgSetStageState('idle');
     vgShowTextLayer(false);
     vgShowBackground(false);
@@ -2243,6 +2343,7 @@ function vgTriggerIn(graphic) {
         if (vgIsCvDrawGraphic(graphic) && !vgCvDrawEnabled()) return;
         if (vgIsCourseScrollGraphic(graphic) && !vgCourseScrollEnabled()) return;
         if (vgIsWeatherGraphic(graphic) && !vgWeatherEnabled()) return;
+        if (vgIsLanesGraphic(graphic) && !vgLanesEnabled()) return;
     }
     if (vgIsScheduleGraphic(graphic) && !vgIsCssOverlayTheme()) return;
 
@@ -2278,6 +2379,11 @@ function vgTriggerIn(graphic) {
 
     if (!kpOwns && vgIsWeatherGraphic(graphic)) {
         vgStartWeatherIntro();
+        return;
+    }
+
+    if (!kpOwns && vgIsLanesGraphic(graphic)) {
+        vgStartLanesIntro();
         return;
     }
 
@@ -2334,6 +2440,10 @@ function vgTriggerOut() {
         }
         if (vgIsWeatherGraphic(graphic)) {
             vgStartWeatherOutro();
+            return;
+        }
+        if (vgIsLanesGraphic(graphic)) {
+            vgStartLanesOutro();
             return;
         }
     }
@@ -2434,7 +2544,7 @@ function vgPrepareContent(graphic, raceParam) {
         window.VmixKarapiro.paintOps?.();
         return;
     }
-    if (vgIsSpeedGraphic(graphic) || vgIsSpeedChartGraphic(graphic) || vgIsLiveTrackingGraphic(graphic) || vgIsCvLeaderGraphic(graphic) || vgIsWeatherGraphic(graphic)) return;
+    if (vgIsSpeedGraphic(graphic) || vgIsSpeedChartGraphic(graphic) || vgIsLiveTrackingGraphic(graphic) || vgIsCvLeaderGraphic(graphic) || vgIsWeatherGraphic(graphic) || vgIsLanesGraphic(graphic)) return;
 
     const race = vgFindRace(raceParam);
 
@@ -3700,6 +3810,12 @@ function vgBindKeyboard() {
             vgStepLiveRace(-1);
             return;
         }
+        if (vgIsLanesGraphic(vgPlayback.graphic) && vgPlayback.state !== 'idle') {
+            if (window.MilfordLaneCards?.onKey?.(e.key)) {
+                e.preventDefault();
+                return;
+            }
+        }
         if (
             (vgPlayback.graphic === 'leader' || vgPlayback.graphic === 'cvleader') &&
             (vgIsMilfordBroadcastTheme() || vgIsKriTheme()) &&
@@ -3779,7 +3895,10 @@ function vgBindRemoteTriggers() {
         vgTriggerClear();
         return;
     }
-    const g = params.get('g') || params.get('graphic');
+    const g =
+        params.get('g') ||
+        params.get('graphic') ||
+        document.body?.dataset?.vmixDefaultGraphic;
     if (!g) return;
     const graphic = vgResolveGraphicAlias(g);
     if (!graphic) return;
@@ -3961,6 +4080,16 @@ function vgDevPreviewHold(graphic) {
         }).catch(() => {});
         return;
     }
+    if (vgIsLanesGraphic(graphic)) {
+        vgSetStageState('hold');
+        vgShowBackground(false);
+        vgShowTextLayer(false);
+        window.MilfordLaneCards?.show({
+            race: vgBuildLaneCardsContext(),
+            demo: false,
+        }).catch(() => {});
+        return;
+    }
     if (vgIsSpeedGraphic(graphic) && vgMilfordCssGraphic(graphic)) {
         vgPrepareTrackerContent();
     } else if (vgIsSpeedGraphic(graphic) && vgIsVideoTheme()) {
@@ -4015,6 +4144,9 @@ window.VmixGraphics = {
     findRace: vgFindRace,
     getRaceParam: vgGetRaceParam,
     getLookup: () => vgState.lookup,
+    buildLaneCardsContext: vgBuildLaneCardsContext,
+    parseClubCode: vgParseClubCode,
+    clubInfo: (clubId) => vgClubInfo(clubId, vgState.lookup),
 };
 window.AltitudeHdVmix = window.VmixGraphics;
 
